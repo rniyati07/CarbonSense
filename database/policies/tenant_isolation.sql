@@ -1,0 +1,34 @@
+-- CarbonSense RLS Policy Reference — tenant_isolation
+-- Source of truth: TRD v2.0 §2.1–§2.2, migration 0002_rls_policies.
+-- This file is documentation; policies are applied via Alembic.
+--
+-- Pattern applied to every tenant-scoped table:
+--
+--   CREATE POLICY tenant_isolation ON <table>
+--     USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
+--   ALTER TABLE <table> FORCE ROW LEVEL SECURITY;
+--
+-- The application sets app.current_tenant_id once per request:
+--
+--   SET LOCAL app.current_tenant_id = '<tenant-uuid>';
+--
+-- SET LOCAL scopes the setting to the current transaction, ensuring it
+-- cannot leak across pooled connections.
+--
+-- FORCE ROW LEVEL SECURITY ensures the policy applies even to the table
+-- owner role, closing the superuser-bypass vector.
+--
+-- Tables covered:
+--   buildings
+--   submeter_circuits
+--   normalized_readings
+--   findings
+--   feedback_labels
+--   audit_log
+--   building_calendar
+
+-- Example: setting tenant context for a request
+-- BEGIN;
+-- SET LOCAL app.current_tenant_id = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+-- SELECT * FROM buildings;  -- returns only rows for that tenant
+-- COMMIT;

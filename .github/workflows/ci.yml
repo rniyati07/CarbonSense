@@ -1,0 +1,162 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Lint ──────────────────────────────────────────────────────────
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Ruff check
+        run: ruff check .
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+  # ── Unit tests ────────────────────────────────────────────────────
+  test-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Run unit tests
+        run: pytest tests/unit -m unit --tb=short -q
+
+  # ── Security fuzzer (ENG-1f) ──────────────────────────────────────
+  # Runs the tenant isolation fuzzer against a real TimescaleDB instance
+  # with RLS enabled. No mocking — the carbonsense_app role is a real
+  # non-superuser Postgres role with FORCE ROW LEVEL SECURITY active.
+  #
+  # This job is CI-blocking: a failure here fails the entire pipeline.
+  # ENG-1f DoD: "runs on every data-layer PR"
+  test-security:
+    runs-on: ubuntu-latest
+
+    services:
+      timescaledb:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: carbonsense
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: carbonsense
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U carbonsense"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: postgresql://carbonsense:testpass@localhost:5432/carbonsense
+      APP_DATABASE_URL: postgresql://carbonsense_app:apppass@localhost:5432/carbonsense
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]" psycopg2-binary
+
+      - name: Run Alembic migrations
+        working-directory: database
+        run: alembic upgrade head
+
+      - name: Create app role with LOGIN for testing
+        run: |
+          psql "$DATABASE_URL" <<'SQL'
+            DO $$
+            BEGIN
+              IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'carbonsense_app') THEN
+                CREATE ROLE carbonsense_app LOGIN PASSWORD 'apppass';
+              ELSE
+                ALTER ROLE carbonsense_app LOGIN PASSWORD 'apppass';
+              END IF;
+            END $$;
+          SQL
+
+      - name: Grant app role permissions
+        run: |
+          psql "$DATABASE_URL" <<'SQL'
+            GRANT SELECT, INSERT, UPDATE, DELETE ON buildings TO carbonsense_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON submeter_circuits TO carbonsense_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON normalized_readings TO carbonsense_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON findings TO carbonsense_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON feedback_labels TO carbonsense_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON building_calendar TO carbonsense_app;
+            GRANT SELECT, INSERT ON audit_log TO carbonsense_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON tenants TO carbonsense_app;
+          SQL
+
+      - name: Run tenant isolation fuzzer
+        run: pytest tests/security -m security -v --tb=short
+
+  # ── Alembic migration validation ──────────────────────────────────
+  migrations:
+    runs-on: ubuntu-latest
+
+    services:
+      timescaledb:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: carbonsense
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: carbonsense
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U carbonsense"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: postgresql://carbonsense:testpass@localhost:5432/carbonsense
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]" psycopg2-binary
+
+      - name: Upgrade to head
+        working-directory: database
+        run: alembic upgrade head
+
+      - name: Downgrade to base
+        working-directory: database
+        run: alembic downgrade base
+
+      - name: Re-upgrade to head (idempotency check)
+        working-directory: database
+        run: alembic upgrade head
