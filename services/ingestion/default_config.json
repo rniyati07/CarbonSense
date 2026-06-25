@@ -1,0 +1,58 @@
+{
+  "config_version": "1.0.0",
+  "normalization_version": "v1.0.0",
+  "sources": {
+    "default": {
+      "source_id": "default",
+      "column_mapping": {
+        "circuit_id_aliases": ["meter_id", "meterId", "device_id", "sensor_id", "circuit_id"],
+        "timestamp_aliases": ["timestamp", "ts", "time", "datetime", "reading_time"],
+        "kwh_aliases": ["kwh", "kWh", "energy_kwh", "consumption", "reading"],
+        "circuit_type_aliases": ["circuit_type", "circuitType", "type", "meter_type", "device_type"]
+      },
+      "expected_columns": ["meter_id", "timestamp", "kwh", "circuit_type"],
+      "expected_types": {
+        "meter_id": "string",
+        "timestamp": "string",
+        "kwh": "numeric",
+        "circuit_type": "string"
+      },
+      "required_fields": ["meter_id", "timestamp", "kwh"],
+      "expected_reporting_interval_minutes": 60
+    }
+  },
+  "outlier": {
+    "method": "rolling_zscore",
+    "zscore_threshold": 3.0,
+    "window_size": 24
+  },
+  "gap": {
+    "max_interpolation_gap_minutes": 120,
+    "degraded_interpolation_ratio": 0.10
+  },
+  "sensor_fault": {
+    "stuck_thresholds": {
+      "main_feed": {"variance_threshold": 1e-6, "window_size": 6, "duration_threshold_hours": 4},
+      "hvac": {"variance_threshold": 1e-5, "window_size": 6, "duration_threshold_hours": 6},
+      "lighting": {"variance_threshold": 1e-5, "window_size": 8, "duration_threshold_hours": 8},
+      "plug_load": {"variance_threshold": 1e-4, "window_size": 8, "duration_threshold_hours": 12}
+    },
+    "expected_intervals": {
+      "smart_meter_api": 15,
+      "csv_upload": 60,
+      "batch_upload": 60
+    },
+    "default_expected_interval_minutes": 60,
+    "dropout_tolerance_factor": 3.0
+  },
+  "bounds": {
+    "version": "1.0.0",
+    "circuit_type_bounds": {
+      "main_feed": {"min_kwh": 0.0, "max_kwh": 5000.0},
+      "hvac": {"min_kwh": 0.0, "max_kwh": 2000.0},
+      "lighting": {"min_kwh": 0.0, "max_kwh": 500.0},
+      "plug_load": {"min_kwh": 0.0, "max_kwh": 200.0}
+    },
+    "default_bounds": {"min_kwh": 0.0, "max_kwh": 5000.0}
+  }
+}

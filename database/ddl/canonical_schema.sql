@@ -202,3 +202,54 @@ ALTER TABLE building_calendar FORCE ROW LEVEL SECURITY;
 -- for the full PL/pgSQL function bodies of:
 --   delete_building_data(UUID, UUID)
 --   delete_tenant_data(UUID)
+
+-- ================================================================
+-- Provenance columns on normalized_readings (migration 0004, ENG-3a)
+-- ================================================================
+
+-- ALTER TABLE normalized_readings ADD COLUMN source_system TEXT;
+-- ALTER TABLE normalized_readings ADD COLUMN ingestion_timestamp TIMESTAMPTZ;
+-- ALTER TABLE normalized_readings ADD COLUMN normalization_version TEXT NOT NULL DEFAULT 'v1.0.0';
+
+-- ================================================================
+-- Data quality alerts (migration 0004, ENG-3a)
+-- ================================================================
+
+CREATE TABLE data_quality_alerts (
+    alert_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    building_id UUID NOT NULL,
+    alert_type TEXT NOT NULL,
+    severity TEXT NOT NULL DEFAULT 'warning',
+    message TEXT NOT NULL,
+    metadata JSONB,
+    acknowledged BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE data_quality_alerts ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_isolation ON data_quality_alerts
+    USING (tenant_id = current_setting('app.current_tenant_id')::uuid);
+ALTER TABLE data_quality_alerts FORCE ROW LEVEL SECURITY;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON data_quality_alerts TO carbonsense_app;
+
+-- ================================================================
+-- Implausible-value bounds (migration 0005, ENG-3a audit fix)
+-- TRD v2.0 §3.1: "a versioned, editable table, not a magic number"
+-- ================================================================
+
+CREATE TABLE implausible_value_bounds (
+    bounds_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    circuit_type TEXT NOT NULL,
+    min_kwh DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    max_kwh DOUBLE PRECISION NOT NULL DEFAULT 5000.0,
+    version TEXT NOT NULL DEFAULT '1.0.0',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_by TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (circuit_type, version)
+);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON implausible_value_bounds TO carbonsense_app;
