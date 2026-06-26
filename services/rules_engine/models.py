@@ -10,6 +10,8 @@ class RuleCitation(BaseModel):
     rule_id: str
     version: int
     citation: str
+    severity: str
+    matched_condition: str
 
 
 class Rule(BaseModel):

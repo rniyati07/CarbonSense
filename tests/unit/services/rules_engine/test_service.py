@@ -1,5 +1,6 @@
 import datetime
 import uuid
+import pytest
 from services.rules_engine.models import Rule
 from services.rules_engine.registry import RuleRegistry
 from services.rules_engine.service import DomainRuleEngineService
@@ -19,6 +20,7 @@ class DummyRegistry(RuleRegistry):
             )
         }
 
+@pytest.mark.unit
 def test_process_readings():
     registry = DummyRegistry()
     service = DomainRuleEngineService(registry)

@@ -99,13 +99,15 @@ class DomainRuleEngineService:
                             RuleCitation(
                                 rule_id=rule.rule_id,
                                 version=rule.version,
-                                citation=rule.citation
+                                citation=rule.citation,
+                                severity=rule.severity,
+                                matched_condition=rule.condition,
                             )
                         ],
                         evidence_window={
                             "start": ts,
-                            "end": ts
-                        }
+                            "end": ts,
+                        },
                     )
                     
                     finding = Finding(

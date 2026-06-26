@@ -1,6 +1,8 @@
 import os
+import pytest
 from services.rules_engine.registry import RuleRegistry
 
+@pytest.mark.unit
 def test_registry_loads_rules(tmp_path):
     d = tmp_path / "rules"
     d.mkdir()
