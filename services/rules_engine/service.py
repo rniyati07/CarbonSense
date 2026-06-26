@@ -5,6 +5,8 @@ from uuid import UUID
 from .models import Finding, ExplainabilityBundle, RuleCitation
 from .registry import RuleRegistry
 from .evaluator import evaluate_condition
+from .repository import FindingRepository
+from .handoff import RootCauseHandoff
 
 
 class DictToObject:
@@ -19,8 +21,15 @@ class DictToObject:
 
 
 class DomainRuleEngineService:
-    def __init__(self, rule_registry: RuleRegistry):
+    def __init__(
+        self, 
+        rule_registry: RuleRegistry, 
+        finding_repository: FindingRepository | None = None,
+        root_cause_handoff: RootCauseHandoff | None = None
+    ):
         self.registry = rule_registry
+        self.finding_repository = finding_repository
+        self.root_cause_handoff = root_cause_handoff
 
     def _matches_applies_to(self, applies_to: dict[str, str], context: dict[str, Any]) -> bool:
         if not applies_to:
@@ -109,5 +118,11 @@ class DomainRuleEngineService:
                         explainability_bundle=bundle
                     )
                     findings.append(finding)
+
+        if self.finding_repository and findings:
+            self.finding_repository.save_all(findings)
+            
+        if self.root_cause_handoff and findings:
+            self.root_cause_handoff.process_findings(findings)
 
         return findings

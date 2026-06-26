@@ -3,10 +3,12 @@ import yaml
 from typing import Dict
 
 from .models import Rule
+from .repository import RuleRegistryRepository
 
 class RuleRegistry:
-    def __init__(self, rules_dir: str):
+    def __init__(self, rules_dir: str, repository: RuleRegistryRepository | None = None):
         self.rules_dir = rules_dir
+        self.repository = repository
         self.rules: Dict[str, Rule] = {}
         self.load_rules()
 
@@ -22,9 +24,18 @@ class RuleRegistry:
                 filepath = os.path.join(self.rules_dir, filename)
                 with open(filepath, 'r') as f:
                     data = yaml.safe_load(f)
-                    # Validate and instantiate Rule model
                     if data:
                         rule = Rule(**data)
+                        
+                        # Validate version bump
+                        if self.repository:
+                            db_version = self.repository.get_registered_version(rule.rule_id)
+                            if db_version is not None and rule.version < db_version:
+                                raise ValueError(
+                                    f"Version regression for rule {rule.rule_id}: "
+                                    f"YAML version {rule.version} is less than DB version {db_version}"
+                                )
+                        
                         self.rules[rule.rule_id] = rule
 
     def get_rule(self, rule_id: str) -> Rule | None:

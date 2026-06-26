@@ -253,3 +253,18 @@ CREATE TABLE implausible_value_bounds (
 );
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON implausible_value_bounds TO carbonsense_app;
+-- ================================================================
+-- Rule Registry (ENG-3b, Rule Engine)
+-- ================================================================
+
+CREATE TABLE rule_registry (
+    rule_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    effective_date DATE NOT NULL,
+    author TEXT NOT NULL,
+    citation TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (rule_id, version)
+);
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON rule_registry TO carbonsense_app;
