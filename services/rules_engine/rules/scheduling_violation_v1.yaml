@@ -1,0 +1,14 @@
+rule_id: scheduling_violation_v1
+version: 1
+effective_date: 2026-06-01
+author: CarbonSense
+citation: "ASHRAE Guideline 36 — General scheduling violation"
+
+applies_to:
+  circuit_type: main_feed
+
+severity: medium
+
+condition: >
+  kwh > building.declared_unoccupied_baseline * 1.5
+  AND NOT within(building.occupancy_schedule, ts)

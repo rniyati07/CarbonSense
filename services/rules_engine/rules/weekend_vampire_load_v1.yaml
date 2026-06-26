@@ -1,0 +1,15 @@
+rule_id: weekend_vampire_load_v1
+version: 1
+effective_date: 2026-06-01
+author: CarbonSense
+citation: "ASHRAE Guideline 36 — Weekend vampire load pattern"
+
+applies_to:
+  circuit_type: plug_load
+
+severity: low
+
+condition: >
+  kwh > building.declared_unoccupied_baseline * 1.2
+  AND NOT within(building.occupancy_schedule, ts)
+  AND ts.isoweekday() in (6, 7)
