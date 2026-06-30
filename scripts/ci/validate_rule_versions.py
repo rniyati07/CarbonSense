@@ -41,16 +41,10 @@ def run(cmd: list[str]) -> str:
 
 def get_modified_rule_files(base_ref: str) -> list[Path]:
     """Return repo-relative paths of rule YAML files modified vs *base_ref*."""
-    diff_output = run(
-        ["git", "diff", "--name-only", base_ref, "--", str(RULES_DIR)]
-    )
+    diff_output = run(["git", "diff", "--name-only", base_ref, "--", str(RULES_DIR)])
     if not diff_output:
         return []
-    return [
-        Path(p)
-        for p in diff_output.splitlines()
-        if Path(p).suffix in RULES_EXTENSIONS
-    ]
+    return [Path(p) for p in diff_output.splitlines() if Path(p).suffix in RULES_EXTENSIONS]
 
 
 def get_base_version(base_ref: str, filepath: Path) -> int | None:
@@ -108,10 +102,7 @@ def main(base_ref: str) -> int:
                 f"Bump the 'version' field before merging."
             )
         else:
-            print(
-                f"  ✅  {filepath}: version incremented "
-                f"({base_ver} → {curr_ver}) — OK"
-            )
+            print(f"  ✅  {filepath}: version incremented ({base_ver} → {curr_ver}) — OK")
 
     if failures:
         print("\nRule version-bump validation FAILED:\n")

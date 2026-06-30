@@ -20,7 +20,6 @@ from services.rules_engine.evaluator import (
     within,
 )
 
-
 # ---------------------------------------------------------------------------
 # _normalize_condition
 # ---------------------------------------------------------------------------
@@ -133,8 +132,6 @@ def test_evaluate_not_false():
 
 @pytest.mark.unit
 def test_evaluate_in_tuple():
-    context = {"ts": datetime.datetime(2026, 6, 27, 12, 0)}  # Saturday = isoweekday 6
-    # Use a helper attribute via method call on datetime — test the int literal
     context2 = {"day": 6}
     assert evaluate_condition("day in (6, 7)", context2) is True
 
@@ -159,9 +156,7 @@ def test_security_import_statement_rejected():
 @pytest.mark.unit
 def test_security_class_traversal_rejected():
     # Class-traversal that would escape a naive eval() sandbox.
-    assert evaluate_condition(
-        "''.__class__.__mro__[1].__subclasses__()", {}
-    ) is False
+    assert evaluate_condition("''.__class__.__mro__[1].__subclasses__()", {}) is False
 
 
 @pytest.mark.unit

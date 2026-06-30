@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -28,7 +29,7 @@ class Rule(BaseModel):
 class ExplainabilityBundle(BaseModel):
     finding_id: UUID | None = None
     contributing_layers: list[str] = Field(default_factory=list)
-    top_features: list[dict] = Field(default_factory=list)
+    top_features: list[dict[str, Any]] = Field(default_factory=list)
     rule_citations: list[RuleCitation] = Field(default_factory=list)
     confidence_band: dict[str, float | str] | None = None
     evidence_window: dict[str, datetime.datetime | str] | None = None
@@ -40,7 +41,9 @@ class Finding(BaseModel):
     building_id: UUID
     circuit_id: UUID | None = None
     layer_origin: str
-    detected_at: datetime.datetime = Field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc))
+    detected_at: datetime.datetime = Field(
+        default_factory=lambda: datetime.datetime.now(datetime.UTC)
+    )
     evidence_window_start: datetime.datetime
     evidence_window_end: datetime.datetime
     confidence: float | None = None

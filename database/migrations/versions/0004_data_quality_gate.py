@@ -22,14 +22,8 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     # ── Provenance columns on normalized_readings ────────────────────
-    op.execute(
-        "ALTER TABLE normalized_readings "
-        "ADD COLUMN source_system TEXT"
-    )
-    op.execute(
-        "ALTER TABLE normalized_readings "
-        "ADD COLUMN ingestion_timestamp TIMESTAMPTZ"
-    )
+    op.execute("ALTER TABLE normalized_readings ADD COLUMN source_system TEXT")
+    op.execute("ALTER TABLE normalized_readings ADD COLUMN ingestion_timestamp TIMESTAMPTZ")
     op.execute(
         "ALTER TABLE normalized_readings "
         "ADD COLUMN normalization_version TEXT NOT NULL DEFAULT 'v1.0.0'"
@@ -55,10 +49,7 @@ def upgrade() -> None:
         "USING (tenant_id = current_setting('app.current_tenant_id')::uuid)"
     )
     op.execute("ALTER TABLE data_quality_alerts FORCE ROW LEVEL SECURITY")
-    op.execute(
-        "GRANT SELECT, INSERT, UPDATE, DELETE "
-        "ON data_quality_alerts TO carbonsense_app"
-    )
+    op.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON data_quality_alerts TO carbonsense_app")
 
 
 def downgrade() -> None:

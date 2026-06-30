@@ -1,17 +1,17 @@
-import datetime
 from typing import Any
 from uuid import UUID
 
-from .models import Finding, ExplainabilityBundle, RuleCitation
-from .registry import RuleRegistry
 from .evaluator import evaluate_condition
-from .repository import FindingRepository
 from .handoff import RootCauseHandoff
+from .models import ExplainabilityBundle, Finding, RuleCitation
+from .registry import RuleRegistry
+from .repository import FindingRepository
 
 
 class DictToObject:
     """Wrapper to allow dot-notation access to dict keys."""
-    def __init__(self, d: dict):
+
+    def __init__(self, d: dict[str, Any]):
         self._d = d
 
     def __getattr__(self, name: str) -> Any:
@@ -22,10 +22,10 @@ class DictToObject:
 
 class DomainRuleEngineService:
     def __init__(
-        self, 
-        rule_registry: RuleRegistry, 
+        self,
+        rule_registry: RuleRegistry,
         finding_repository: FindingRepository | None = None,
-        root_cause_handoff: RootCauseHandoff | None = None
+        root_cause_handoff: RootCauseHandoff | None = None,
     ):
         self.registry = rule_registry
         self.finding_repository = finding_repository
@@ -46,7 +46,7 @@ class DomainRuleEngineService:
         building_id: UUID,
         building_context: Any,
         readings: list[Any],
-        circuit_types: dict[UUID, str]
+        circuit_types: dict[UUID, str],
     ) -> list[Finding]:
         """
         Evaluates rules against a batch of readings for a building.
@@ -73,19 +73,17 @@ class DomainRuleEngineService:
                 circuit_id = getattr(reading, "circuit_id", None)
                 ts = getattr(reading, "ts", None)
                 kwh = getattr(reading, "kwh", None)
-            
+
             if data_quality_status == "quarantined":
                 continue
 
+            if ts is None:
+                continue
+
             circuit_type = circuit_types.get(circuit_id) if circuit_id else None
-            
+
             # Setup the context for evaluation
-            context = {
-                "ts": ts,
-                "kwh": kwh,
-                "building": b_obj,
-                "circuit_type": circuit_type
-            }
+            context = {"ts": ts, "kwh": kwh, "building": b_obj, "circuit_type": circuit_type}
 
             for rule in rules:
                 if not self._matches_applies_to(rule.applies_to, context):
@@ -109,7 +107,7 @@ class DomainRuleEngineService:
                             "end": ts,
                         },
                     )
-                    
+
                     finding = Finding(
                         tenant_id=tenant_id,
                         building_id=building_id,
@@ -117,13 +115,13 @@ class DomainRuleEngineService:
                         layer_origin="domain_rule",
                         evidence_window_start=ts,
                         evidence_window_end=ts,
-                        explainability_bundle=bundle
+                        explainability_bundle=bundle,
                     )
                     findings.append(finding)
 
         if self.finding_repository and findings:
             self.finding_repository.save_all(findings)
-            
+
         if self.root_cause_handoff and findings:
             self.root_cause_handoff.process_findings(findings)
 

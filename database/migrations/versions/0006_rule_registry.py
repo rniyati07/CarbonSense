@@ -23,7 +23,6 @@ from collections.abc import Sequence
 
 from alembic import op
 
-
 revision: str = "0006"
 down_revision: str = "0005"
 branch_labels: str | Sequence[str] | None = None
@@ -43,10 +42,7 @@ def upgrade() -> None:
         )
     """)
 
-    op.execute(
-        "GRANT SELECT, INSERT, UPDATE, DELETE "
-        "ON rule_registry TO carbonsense_app"
-    )
+    op.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON rule_registry TO carbonsense_app")
 
 
 def downgrade() -> None:

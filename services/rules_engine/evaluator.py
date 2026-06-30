@@ -30,12 +30,12 @@ import datetime
 import re
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Schedule helper (unchanged public API)
 # ---------------------------------------------------------------------------
 
-def within(schedule: dict | None, ts: datetime.datetime) -> bool:
+
+def within(schedule: dict[str, Any] | None, ts: datetime.datetime) -> bool:
     """Return True if *ts* falls within the declared occupancy *schedule*.
 
     Schedule format::
@@ -52,12 +52,8 @@ def within(schedule: dict | None, ts: datetime.datetime) -> bool:
         day_of_week = ts.isoweekday()
         if day_of_week not in schedule.get("days", []):
             return False
-        start_time = datetime.datetime.strptime(
-            schedule.get("start", "00:00"), "%H:%M"
-        ).time()
-        end_time = datetime.datetime.strptime(
-            schedule.get("end", "23:59"), "%H:%M"
-        ).time()
+        start_time = datetime.datetime.strptime(schedule.get("start", "00:00"), "%H:%M").time()
+        end_time = datetime.datetime.strptime(schedule.get("end", "23:59"), "%H:%M").time()
         return start_time <= ts.time() <= end_time
     except Exception:
         return False
@@ -69,28 +65,50 @@ def within(schedule: dict | None, ts: datetime.datetime) -> bool:
 
 _ALLOWED_OPS = (
     # BoolOp operands
-    ast.And, ast.Or,
+    ast.And,
+    ast.Or,
     # UnaryOp operators
     ast.Not,
     # BinOp operators
-    ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Mod, ast.Pow, ast.FloorDiv,
+    ast.Add,
+    ast.Sub,
+    ast.Mult,
+    ast.Div,
+    ast.Mod,
+    ast.Pow,
+    ast.FloorDiv,
     # Compare operators
-    ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE,
-    ast.In, ast.NotIn,
+    ast.Eq,
+    ast.NotEq,
+    ast.Lt,
+    ast.LtE,
+    ast.Gt,
+    ast.GtE,
+    ast.In,
+    ast.NotIn,
 )
 
 
 class _SafeEvalVisitor(ast.NodeVisitor):
     """Walk an AST and raise ValueError if any disallowed node is encountered."""
 
-    _ALLOWED_NODES = frozenset({
-        ast.Expression,
-        ast.BoolOp, ast.BinOp, ast.UnaryOp, ast.Compare,
-        ast.Name, ast.Attribute, ast.Constant,
-        ast.Call,
-        ast.Tuple, ast.List,  # needed for ``in (6, 7)`` syntax
-        ast.Load,
-    } | set(_ALLOWED_OPS))
+    _ALLOWED_NODES = frozenset(
+        {
+            ast.Expression,
+            ast.BoolOp,
+            ast.BinOp,
+            ast.UnaryOp,
+            ast.Compare,
+            ast.Name,
+            ast.Attribute,
+            ast.Constant,
+            ast.Call,
+            ast.Tuple,
+            ast.List,  # needed for ``in (6, 7)`` syntax
+            ast.Load,
+        }
+        | set(_ALLOWED_OPS)
+    )
 
     def generic_visit(self, node: ast.AST) -> None:
         if type(node) not in self._ALLOWED_NODES:
@@ -116,6 +134,7 @@ class _SafeEvalVisitor(ast.NodeVisitor):
 # ---------------------------------------------------------------------------
 # Context resolver
 # ---------------------------------------------------------------------------
+
 
 class _ContextResolver(ast.NodeVisitor):
     """Evaluate a whitelisted AST against a flat context dict.
@@ -149,9 +168,7 @@ class _ContextResolver(ast.NodeVisitor):
         # Support both dict-like and object-like containers
         if isinstance(obj, dict):
             if attr not in obj:
-                raise ValueError(
-                    f"Attribute '{attr}' not found in dict context object"
-                )
+                raise ValueError(f"Attribute '{attr}' not found in dict context object")
             return obj[attr]
         if hasattr(obj, attr):
             return getattr(obj, attr)
@@ -159,10 +176,10 @@ class _ContextResolver(ast.NodeVisitor):
 
     # -- Collection nodes (for `in (6, 7)`) ----------------------------------
 
-    def eval_Tuple(self, node: ast.Tuple) -> tuple:  # noqa: N802
+    def eval_Tuple(self, node: ast.Tuple) -> tuple[Any, ...]:  # noqa: N802
         return tuple(self.eval(e) for e in node.elts)
 
-    def eval_List(self, node: ast.List) -> list:  # noqa: N802
+    def eval_List(self, node: ast.List) -> list[Any]:  # noqa: N802
         return [self.eval(e) for e in node.elts]
 
     # -- Operator nodes ------------------------------------------------------
@@ -194,14 +211,14 @@ class _ContextResolver(ast.NodeVisitor):
         if isinstance(op, ast.Mod):
             return left % right
         if isinstance(op, ast.Pow):
-            return left ** right
+            return left**right
         if isinstance(op, ast.FloorDiv):
             return left // right
         raise ValueError(f"Unknown BinOp: {type(op).__name__}")
 
     def eval_Compare(self, node: ast.Compare) -> bool:  # noqa: N802
         left = self.eval(node.left)
-        for op, comparator in zip(node.ops, node.comparators):
+        for op, comparator in zip(node.ops, node.comparators, strict=True):
             right = self.eval(comparator)
             if isinstance(op, ast.Eq):
                 result = left == right
@@ -242,6 +259,7 @@ class _ContextResolver(ast.NodeVisitor):
 # ---------------------------------------------------------------------------
 # Public API (unchanged from previous implementation)
 # ---------------------------------------------------------------------------
+
 
 def _normalize_condition(condition: str) -> str:
     """Convert SQL-style boolean operators to Python keywords.

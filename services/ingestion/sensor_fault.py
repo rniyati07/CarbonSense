@@ -5,7 +5,6 @@ from collections import defaultdict
 from uuid import UUID
 
 import numpy as np
-import pandas as pd
 
 from services.ingestion.config import SensorFaultConfig
 from services.ingestion.models import NormalizedReading, QualityIssue
@@ -17,9 +16,7 @@ def detect_stuck_at_value(
     circuit_type: str,
     config: SensorFaultConfig,
 ) -> list[QualityIssue]:
-    thresholds = config.stuck_thresholds.get(
-        circuit_type, config.default_stuck_thresholds
-    )
+    thresholds = config.stuck_thresholds.get(circuit_type, config.default_stuck_thresholds)
     sorted_readings = sorted(
         [r for r in readings if r.kwh is not None],
         key=lambda r: r.ts,
@@ -86,17 +83,19 @@ def _maybe_add_stuck_issue(
     if duration_hours >= duration_threshold_hours:
         stuck_value = float(kwh_values[start_idx])
         severity = "quarantined" if circuit_type == "main_feed" else "degraded"
-        issues.append(QualityIssue(
-            issue_type="stuck_at_value",
-            severity=severity,
-            circuit_id=circuit_id,
-            ts_start=ts_start,
-            ts_end=ts_end,
-            description=(
-                f"Stuck at {stuck_value:.2f} kWh for {duration_hours:.1f}h "
-                f"(threshold: {duration_threshold_hours}h for {circuit_type})"
-            ),
-        ))
+        issues.append(
+            QualityIssue(
+                issue_type="stuck_at_value",
+                severity=severity,
+                circuit_id=circuit_id,
+                ts_start=ts_start,
+                ts_end=ts_end,
+                description=(
+                    f"Stuck at {stuck_value:.2f} kWh for {duration_hours:.1f}h "
+                    f"(threshold: {duration_threshold_hours}h for {circuit_type})"
+                ),
+            )
+        )
 
 
 def detect_dropout(
@@ -119,19 +118,21 @@ def detect_dropout(
         delta_minutes = (sorted_ts[i] - sorted_ts[i - 1]).total_seconds() / 60
 
         if delta_minutes > max_gap_minutes:
-            issues.append(QualityIssue(
-                issue_type="dropout",
-                severity="degraded",
-                circuit_id=circuit_id,
-                ts_start=sorted_ts[i - 1],
-                ts_end=sorted_ts[i],
-                description=(
-                    f"Reporting gap of {delta_minutes:.0f} min exceeds "
-                    f"{max_gap_minutes:.0f} min "
-                    f"({config.dropout_tolerance_factor}x expected "
-                    f"{expected_minutes} min for {ingestion_source})"
-                ),
-            ))
+            issues.append(
+                QualityIssue(
+                    issue_type="dropout",
+                    severity="degraded",
+                    circuit_id=circuit_id,
+                    ts_start=sorted_ts[i - 1],
+                    ts_end=sorted_ts[i],
+                    description=(
+                        f"Reporting gap of {delta_minutes:.0f} min exceeds "
+                        f"{max_gap_minutes:.0f} min "
+                        f"({config.dropout_tolerance_factor}x expected "
+                        f"{expected_minutes} min for {ingestion_source})"
+                    ),
+                )
+            )
 
     return issues
 
@@ -151,18 +152,14 @@ def detect_sensor_faults(
     for circuit_id, circuit_readings in by_circuit.items():
         circuit_type = circuit_types.get(circuit_id, "unknown")
 
-        stuck_issues = detect_stuck_at_value(
-            circuit_readings, circuit_id, circuit_type, config
-        )
+        stuck_issues = detect_stuck_at_value(circuit_readings, circuit_id, circuit_type, config)
         all_issues.extend(stuck_issues)
 
         if raw_timestamps_by_circuit and circuit_id in raw_timestamps_by_circuit:
             dropout_ts = raw_timestamps_by_circuit[circuit_id]
         else:
             dropout_ts = [r.ts for r in circuit_readings if r.kwh is not None]
-        dropout_issues = detect_dropout(
-            dropout_ts, circuit_id, ingestion_source, config
-        )
+        dropout_issues = detect_dropout(dropout_ts, circuit_id, ingestion_source, config)
         all_issues.extend(dropout_issues)
 
     return all_issues
