@@ -35,9 +35,7 @@ class DatabaseAlertStore:
                     alert.alert_type,
                     alert.severity,
                     alert.message,
-                    json.dumps(
-                        {k: v for k, v in alert.metadata.items() if v is not None}
-                    ),
+                    json.dumps({k: v for k, v in alert.metadata.items() if v is not None}),
                 ),
             )
             conn.commit()

@@ -30,18 +30,20 @@ def check_bounds(
         bounds = config.circuit_type_bounds.get(circuit_type, config.default_bounds)
 
         if reading.kwh < bounds.min_kwh or reading.kwh > bounds.max_kwh:
-            issues.append(QualityIssue(
-                issue_type="implausible_value",
-                severity="quarantined",
-                circuit_id=reading.circuit_id,
-                ts_start=reading.ts,
-                ts_end=reading.ts,
-                description=(
-                    f"Value {reading.kwh:.2f} kWh outside bounds "
-                    f"[{bounds.min_kwh}, {bounds.max_kwh}] "
-                    f"for circuit_type={circuit_type}"
-                ),
-            ))
+            issues.append(
+                QualityIssue(
+                    issue_type="implausible_value",
+                    severity="quarantined",
+                    circuit_id=reading.circuit_id,
+                    ts_start=reading.ts,
+                    ts_end=reading.ts,
+                    description=(
+                        f"Value {reading.kwh:.2f} kWh outside bounds "
+                        f"[{bounds.min_kwh}, {bounds.max_kwh}] "
+                        f"for circuit_type={circuit_type}"
+                    ),
+                )
+            )
 
     return issues
 
@@ -53,9 +55,7 @@ def compute_schema_fingerprint(
     normalized = sorted(c.strip().lower() for c in columns)
     payload: dict[str, object] = {"columns": normalized}
     if column_types:
-        payload["types"] = {
-            k.strip().lower(): v for k, v in sorted(column_types.items())
-        }
+        payload["types"] = {k.strip().lower(): v for k, v in sorted(column_types.items())}
     raw = json.dumps(payload, sort_keys=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
@@ -82,28 +82,30 @@ def check_schema_drift(
     missing_required = required_set & missing
 
     if missing_required:
-        issues.append(QualityIssue(
-            issue_type="schema_drift",
-            severity="quarantined",
-            description=(
-                f"Required columns missing for source '{source_id}': "
-                f"{sorted(missing_required)}"
-            ),
-        ))
+        issues.append(
+            QualityIssue(
+                issue_type="schema_drift",
+                severity="quarantined",
+                description=(
+                    f"Required columns missing for source '{source_id}': {sorted(missing_required)}"
+                ),
+            )
+        )
     elif missing or extra:
         changes: list[str] = []
         if missing:
             changes.append(f"missing={sorted(missing)}")
         if extra:
             changes.append(f"unexpected={sorted(extra)}")
-        issues.append(QualityIssue(
-            issue_type="schema_drift",
-            severity="degraded",
-            description=(
-                f"Schema drift detected for source '{source_id}': "
-                + ", ".join(changes)
-            ),
-        ))
+        issues.append(
+            QualityIssue(
+                issue_type="schema_drift",
+                severity="degraded",
+                description=(
+                    f"Schema drift detected for source '{source_id}': " + ", ".join(changes)
+                ),
+            )
+        )
 
     return issues
 

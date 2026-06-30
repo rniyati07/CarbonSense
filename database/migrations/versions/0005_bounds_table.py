@@ -49,8 +49,7 @@ def upgrade() -> None:
     """)
 
     op.execute(
-        "GRANT SELECT, INSERT, UPDATE, DELETE "
-        "ON implausible_value_bounds TO carbonsense_app"
+        "GRANT SELECT, INSERT, UPDATE, DELETE ON implausible_value_bounds TO carbonsense_app"
     )
 
 
