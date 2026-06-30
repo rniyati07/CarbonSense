@@ -4,6 +4,7 @@ import asyncio
 from datetime import timedelta
 
 from temporalio import workflow
+from temporalio.exceptions import ApplicationError
 
 with workflow.unsafe.imports_passed_through():
     from orchestration.temporal.activities.analysis_stubs import (
@@ -46,7 +47,7 @@ class AnalysisPipelineWorkflow:
     @workflow.run
     async def run(self, input: AnalysisPipelineInput) -> str:
         if not input.tenant_id:
-            raise ValueError("tenant_id is required")
+            raise ApplicationError("tenant_id is required", non_retryable=True)
 
         # Layer 1: Data Quality Gate
         self._current_step = "data_quality_gate"

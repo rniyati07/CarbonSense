@@ -1,0 +1,42 @@
+{
+  "tenant_id": "11111111-1111-1111-1111-111111111111",
+  "building_id": "22222222-2222-2222-2222-222222222222",
+  "building_context": {
+    "declared_unoccupied_baseline": 100,
+    "occupancy_schedule": {
+      "days": [1, 2, 3, 4, 5],
+      "start": "08:00",
+      "end": "18:00"
+    }
+  },
+  "circuit_types": {
+    "33333333-3333-3333-3333-333333333333": "hvac",
+    "44444444-4444-4444-4444-444444444444": "plug_load",
+    "55555555-5555-5555-5555-555555555555": "main_feed"
+  },
+  "readings": [
+    {
+      "ts": "2026-06-27T12:00:00",
+      "kwh": 150,
+      "circuit_id": "33333333-3333-3333-3333-333333333333",
+      "data_quality_status": "pass"
+    },
+    {
+      "ts": "2026-06-27T12:00:00",
+      "kwh": 130,
+      "circuit_id": "44444444-4444-4444-4444-444444444444",
+      "data_quality_status": "pass"
+    },
+    {
+      "ts": "2026-06-27T12:00:00",
+      "kwh": 160,
+      "circuit_id": "55555555-5555-5555-5555-555555555555",
+      "data_quality_status": "pass"
+    }
+  ],
+  "expected_finding_rules": [
+    "hvac_after_hours_v3",
+    "weekend_vampire_load_v1",
+    "scheduling_violation_v1"
+  ]
+}

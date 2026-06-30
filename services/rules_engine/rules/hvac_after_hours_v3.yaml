@@ -1,0 +1,14 @@
+rule_id: hvac_after_hours_v3
+version: 3
+effective_date: 2026-03-01
+author: CarbonSense
+citation: "ASHRAE Guideline 36 — HVAC scheduling FDD pattern"
+
+applies_to:
+  circuit_type: hvac
+
+severity: medium
+
+condition: >
+  kwh > building.declared_unoccupied_baseline * 1.4
+  AND NOT within(building.occupancy_schedule, ts)

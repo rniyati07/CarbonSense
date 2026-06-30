@@ -6,13 +6,12 @@ from typing import TYPE_CHECKING
 
 from orchestration.events.kafka.producer import EventPublisher
 from orchestration.events.kafka.schemas.data_arrived import BuildingDataArrivedEvent
-from shared.config.kafka import KafkaSettings
-
 from services.ingestion.models import (
     BatchQualityResult,
     DataQualityAlertPayload,
     PublishOutcome,
 )
+from shared.config.kafka import KafkaSettings
 
 if TYPE_CHECKING:
     from services.ingestion.alert_store import AlertStore
@@ -37,9 +36,7 @@ class DataQualityEventPublisher:
         self,
         result: BatchQualityResult,
     ) -> DataQualityAlertPayload | None:
-        drift_issues = [
-            i for i in result.quality_issues if i.issue_type == "schema_drift"
-        ]
+        drift_issues = [i for i in result.quality_issues if i.issue_type == "schema_drift"]
         if not drift_issues:
             return None
 
@@ -69,7 +66,7 @@ class DataQualityEventPublisher:
                 tenant_id=result.tenant_id,
                 building_id=result.building_id,
                 correlation_id=uuid.uuid4(),
-                timestamp=datetime.datetime.now(datetime.timezone.utc),
+                timestamp=datetime.datetime.now(datetime.UTC),
                 event_type="building.data.arrived",
                 data_quality_status=result.overall_status,
                 batch_row_count=result.total_rows,
@@ -96,9 +93,7 @@ class DataQualityEventPublisher:
             metadata={
                 "total_rows": result.total_rows,
                 "quarantined_count": result.quarantined_count,
-                "issue_types": ", ".join(
-                    sorted({i.issue_type for i in result.quality_issues})
-                ),
+                "issue_types": ", ".join(sorted({i.issue_type for i in result.quality_issues})),
             },
         )
         self._persist_alert(alert)

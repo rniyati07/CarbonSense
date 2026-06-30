@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 from temporalio import workflow
+from temporalio.exceptions import ApplicationError
 
 with workflow.unsafe.imports_passed_through():
     from orchestration.temporal.activities.retraining_stub import retraining_activity
@@ -21,7 +22,7 @@ class RetrainingWorkflow:
     @workflow.run
     async def run(self, input: RetrainingInput) -> ActivityResult:
         if not input.tenant_id:
-            raise ValueError("tenant_id is required")
+            raise ApplicationError("tenant_id is required", non_retryable=True)
         return await workflow.execute_activity(
             retraining_activity,
             input,
