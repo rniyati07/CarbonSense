@@ -14,9 +14,7 @@ class ColumnMappingConfig(BaseModel):
     timestamp_aliases: list[str] = Field(
         default=["timestamp", "ts", "time", "datetime", "reading_time"]
     )
-    kwh_aliases: list[str] = Field(
-        default=["kwh", "kWh", "energy_kwh", "consumption", "reading"]
-    )
+    kwh_aliases: list[str] = Field(default=["kwh", "kWh", "energy_kwh", "consumption", "reading"])
     circuit_type_aliases: list[str] = Field(
         default=["circuit_type", "circuitType", "type", "meter_type", "device_type"]
     )
@@ -25,11 +23,14 @@ class ColumnMappingConfig(BaseModel):
 class SourceConfig(BaseModel):
     source_id: str
     column_mapping: ColumnMappingConfig = Field(default_factory=ColumnMappingConfig)
-    expected_columns: list[str] = Field(
-        default=["meter_id", "timestamp", "kwh", "circuit_type"]
-    )
+    expected_columns: list[str] = Field(default=["meter_id", "timestamp", "kwh", "circuit_type"])
     expected_types: dict[str, str] = Field(
-        default={"meter_id": "string", "timestamp": "string", "kwh": "numeric", "circuit_type": "string"}
+        default={
+            "meter_id": "string",
+            "timestamp": "string",
+            "kwh": "numeric",
+            "circuit_type": "string",
+        }
     )
     required_fields: list[str] = Field(default=["meter_id", "timestamp", "kwh"])
     expected_reporting_interval_minutes: int = 60
@@ -53,28 +54,38 @@ class StuckAtValueThresholds(BaseModel):
 
 
 class SensorFaultConfig(BaseModel):
-    stuck_thresholds: dict[str, StuckAtValueThresholds] = Field(default_factory=lambda: {
-        "main_feed": StuckAtValueThresholds(
-            variance_threshold=1e-6, window_size=6, duration_threshold_hours=4,
-        ),
-        "hvac": StuckAtValueThresholds(
-            variance_threshold=1e-5, window_size=6, duration_threshold_hours=6,
-        ),
-        "lighting": StuckAtValueThresholds(
-            variance_threshold=1e-5, window_size=8, duration_threshold_hours=8,
-        ),
-        "plug_load": StuckAtValueThresholds(
-            variance_threshold=1e-4, window_size=8, duration_threshold_hours=12,
-        ),
-    })
-    default_stuck_thresholds: StuckAtValueThresholds = Field(
-        default_factory=StuckAtValueThresholds
+    stuck_thresholds: dict[str, StuckAtValueThresholds] = Field(
+        default_factory=lambda: {
+            "main_feed": StuckAtValueThresholds(
+                variance_threshold=1e-6,
+                window_size=6,
+                duration_threshold_hours=4,
+            ),
+            "hvac": StuckAtValueThresholds(
+                variance_threshold=1e-5,
+                window_size=6,
+                duration_threshold_hours=6,
+            ),
+            "lighting": StuckAtValueThresholds(
+                variance_threshold=1e-5,
+                window_size=8,
+                duration_threshold_hours=8,
+            ),
+            "plug_load": StuckAtValueThresholds(
+                variance_threshold=1e-4,
+                window_size=8,
+                duration_threshold_hours=12,
+            ),
+        }
     )
-    expected_intervals: dict[str, int] = Field(default_factory=lambda: {
-        "smart_meter_api": 15,
-        "csv_upload": 60,
-        "batch_upload": 60,
-    })
+    default_stuck_thresholds: StuckAtValueThresholds = Field(default_factory=StuckAtValueThresholds)
+    expected_intervals: dict[str, int] = Field(
+        default_factory=lambda: {
+            "smart_meter_api": 15,
+            "csv_upload": 60,
+            "batch_upload": 60,
+        }
+    )
     default_expected_interval_minutes: int = 60
     dropout_tolerance_factor: float = 3.0
 
@@ -86,12 +97,14 @@ class BoundsEntry(BaseModel):
 
 class BoundsConfig(BaseModel):
     version: str = "1.0.0"
-    circuit_type_bounds: dict[str, BoundsEntry] = Field(default_factory=lambda: {
-        "main_feed": BoundsEntry(min_kwh=0.0, max_kwh=5000.0),
-        "hvac": BoundsEntry(min_kwh=0.0, max_kwh=2000.0),
-        "lighting": BoundsEntry(min_kwh=0.0, max_kwh=500.0),
-        "plug_load": BoundsEntry(min_kwh=0.0, max_kwh=200.0),
-    })
+    circuit_type_bounds: dict[str, BoundsEntry] = Field(
+        default_factory=lambda: {
+            "main_feed": BoundsEntry(min_kwh=0.0, max_kwh=5000.0),
+            "hvac": BoundsEntry(min_kwh=0.0, max_kwh=2000.0),
+            "lighting": BoundsEntry(min_kwh=0.0, max_kwh=500.0),
+            "plug_load": BoundsEntry(min_kwh=0.0, max_kwh=200.0),
+        }
+    )
     default_bounds: BoundsEntry = Field(
         default_factory=lambda: BoundsEntry(min_kwh=0.0, max_kwh=5000.0)
     )

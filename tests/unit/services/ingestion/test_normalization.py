@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime
-from uuid import UUID
 
 import pytest
 

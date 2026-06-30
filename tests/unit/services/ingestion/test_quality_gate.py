@@ -7,8 +7,6 @@ import pytest
 from services.ingestion.config import DataQualityGateConfig
 from services.ingestion.quality_gate import DataQualityGate
 from tests.unit.services.ingestion.conftest import (
-    HVAC_CIRCUIT_ID,
-    LIGHT_CIRCUIT_ID,
     make_batch,
 )
 
@@ -45,9 +43,7 @@ class TestQualityGateGaps:
         result = gate.process_batch(batch)
         assert result.quarantined_count > 0
         assert result.overall_status in ("degraded", "quarantined")
-        gap_issues = [
-            i for i in result.quality_issues if i.issue_type == "gap_beyond_bound"
-        ]
+        gap_issues = [i for i in result.quality_issues if i.issue_type == "gap_beyond_bound"]
         assert len(gap_issues) > 0
 
 
@@ -57,9 +53,7 @@ class TestQualityGateSensorFaults:
         gate = DataQualityGate()
         batch = make_batch("stuck_at_value.csv")
         result = gate.process_batch(batch)
-        stuck_issues = [
-            i for i in result.quality_issues if i.issue_type == "stuck_at_value"
-        ]
+        stuck_issues = [i for i in result.quality_issues if i.issue_type == "stuck_at_value"]
         assert len(stuck_issues) > 0
         assert result.overall_status in ("degraded", "quarantined")
 
@@ -67,12 +61,8 @@ class TestQualityGateSensorFaults:
         gate = DataQualityGate()
         batch = make_batch("dropout.csv")
         result = gate.process_batch(batch)
-        has_dropout = any(
-            i.issue_type == "dropout" for i in result.quality_issues
-        )
-        has_gap = any(
-            i.issue_type == "gap_beyond_bound" for i in result.quality_issues
-        )
+        has_dropout = any(i.issue_type == "dropout" for i in result.quality_issues)
+        has_gap = any(i.issue_type == "gap_beyond_bound" for i in result.quality_issues)
         assert has_dropout or has_gap
         assert result.overall_status in ("degraded", "quarantined")
 
@@ -94,9 +84,7 @@ class TestQualityGateBoundsAndDrift:
         gate = DataQualityGate()
         batch = make_batch("schema_drift.csv")
         result = gate.process_batch(batch)
-        drift_issues = [
-            i for i in result.quality_issues if i.issue_type == "schema_drift"
-        ]
+        drift_issues = [i for i in result.quality_issues if i.issue_type == "schema_drift"]
         assert len(drift_issues) > 0
         assert result.overall_status in ("degraded", "quarantined")
 
@@ -104,7 +92,6 @@ class TestQualityGateBoundsAndDrift:
 @pytest.mark.unit
 class TestBatchStatusLogic:
     def test_all_quarantined_batch_status(self) -> None:
-        gate = DataQualityGate()
         config = DataQualityGateConfig()
         config.bounds.circuit_type_bounds["hvac"].max_kwh = 0.001
         config.bounds.circuit_type_bounds["lighting"].max_kwh = 0.001
