@@ -8,6 +8,7 @@ must be conscious and cause this test to fail as a review gate.
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from services.stl_detection.config import STLDetectionConfig
 
@@ -75,19 +76,19 @@ class TestSTLDetectionConfigValidation:
     """Verify Pydantic validation rejects nonsensical values."""
 
     def test_rejects_zero_period(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             STLDetectionConfig(stl_period_hours=0)
 
     def test_rejects_negative_threshold(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             STLDetectionConfig(residual_zscore_anomaly_threshold=-1.0)
 
     def test_rejects_zero_threshold(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             STLDetectionConfig(residual_zscore_anomaly_threshold=0.0)
 
     def test_rejects_min_history_less_than_2(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             STLDetectionConfig(stl_min_history_observations=1)
 
     def test_allows_custom_threshold(self) -> None:

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import datetime
 import math
-import uuid
 from uuid import UUID
 
 import pytest
@@ -51,7 +50,7 @@ def make_reading(
         data_quality_status=data_quality_status,
         schema_version="normalized_reading_v1",
         source_system="csv_upload",
-        ingestion_timestamp=datetime.datetime.now(tz=datetime.timezone.utc),
+        ingestion_timestamp=datetime.datetime.now(tz=datetime.UTC),
         normalization_version="v1.0.0",
     )
 
@@ -87,13 +86,16 @@ def build_business_day_series(
 
     for day_offset in range(n_days):
         current_date = start_date + datetime.timedelta(days=day_offset)
-        calendar_entries.append(
-            make_calendar_entry(current_date, DayType.BUSINESS_DAY)
-        )
+        calendar_entries.append(make_calendar_entry(current_date, DayType.BUSINESS_DAY))
         for hour in range(24):
             ts = datetime.datetime(
-                current_date.year, current_date.month, current_date.day,
-                hour, 0, 0, tzinfo=datetime.timezone.utc,
+                current_date.year,
+                current_date.month,
+                current_date.day,
+                hour,
+                0,
+                0,
+                tzinfo=datetime.UTC,
             )
             kwh = base_kwh + amplitude * math.sin(math.pi * hour / 23)
             readings.append(make_reading(ts, round(kwh, 6)))
@@ -115,13 +117,16 @@ def build_holiday_series(
 
     for day_offset in range(n_days):
         current_date = start_date + datetime.timedelta(days=day_offset)
-        calendar_entries.append(
-            make_calendar_entry(current_date, DayType.HOLIDAY)
-        )
+        calendar_entries.append(make_calendar_entry(current_date, DayType.HOLIDAY))
         for hour in range(24):
             ts = datetime.datetime(
-                current_date.year, current_date.month, current_date.day,
-                hour, 0, 0, tzinfo=datetime.timezone.utc,
+                current_date.year,
+                current_date.month,
+                current_date.day,
+                hour,
+                0,
+                0,
+                tzinfo=datetime.UTC,
             )
             readings.append(make_reading(ts, standby_kwh))
 

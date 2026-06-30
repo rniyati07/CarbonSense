@@ -45,7 +45,6 @@ import datetime
 from collections import defaultdict
 from uuid import UUID
 
-import numpy as np
 import pandas as pd
 
 from services.ingestion.models import NormalizedReading
@@ -145,9 +144,7 @@ class STLDetectionService:
         }
 
         # Determine the building_id from the first calendar entry for error messages
-        building_id_str = (
-            str(calendar_entries[0].building_id) if calendar_entries else "<unknown>"
-        )
+        building_id_str = str(calendar_entries[0].building_id) if calendar_entries else "<unknown>"
 
         # Sort readings by timestamp for stable processing
         sorted_readings = sorted(readings, key=lambda r: r.ts)
@@ -184,7 +181,7 @@ class STLDetectionService:
                 cohort_readings=cohort_readings,
                 day_type=day_type,
             )
-            for idx, result in zip(indices, cohort_results):
+            for idx, result in zip(indices, cohort_results, strict=True):
                 results[idx] = result
 
         # All slots must be filled — if any None remains it is a logic error
@@ -255,7 +252,7 @@ class STLDetectionService:
             window_start = residual_results[0].ts
             window_end = residual_results[-1].ts
         else:
-            now = datetime.datetime.now(tz=datetime.timezone.utc)
+            now = datetime.datetime.now(tz=datetime.UTC)
             window_start = now
             window_end = now
 
@@ -305,7 +302,7 @@ class STLDetectionService:
         # Build a pandas Series for STL: index = UTC datetime, values = kwh
         ts_list = [r.ts for r in cohort_readings]
         kwh_list = [r.kwh if r.kwh is not None else float("nan") for r in cohort_readings]
-        series = pd.Series(kwh_list, index=pd.DatetimeIndex(ts_list, tz=datetime.timezone.utc))
+        series = pd.Series(kwh_list, index=pd.DatetimeIndex(ts_list, tz=datetime.UTC))
         series = series.sort_index()
 
         try:
@@ -342,9 +339,9 @@ class STLDetectionService:
             # Normalise the reading's ts to UTC for lookup
             reading_ts = reading.ts
             if reading_ts.tzinfo is None:
-                reading_ts = reading_ts.replace(tzinfo=datetime.timezone.utc)
+                reading_ts = reading_ts.replace(tzinfo=datetime.UTC)
             else:
-                reading_ts = reading_ts.astimezone(datetime.timezone.utc)
+                reading_ts = reading_ts.astimezone(datetime.UTC)
 
             idx = ts_to_idx.get(reading_ts)
             if idx is None:

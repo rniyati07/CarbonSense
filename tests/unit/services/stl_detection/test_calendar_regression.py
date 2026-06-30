@@ -38,9 +38,6 @@ from services.stl_detection.config import STLDetectionConfig
 from services.stl_detection.models import DayType
 from services.stl_detection.service import STLDetectionService
 from tests.unit.services.stl_detection.conftest import (
-    BUILDING_ID,
-    CIRCUIT_ID,
-    TENANT_ID,
     make_calendar_entry,
     make_reading,
 )
@@ -50,7 +47,7 @@ from tests.unit.services.stl_detection.conftest import (
 # ------------------------------------------------------------------ #
 
 # Use a smaller period for faster tests (still a valid STL decomposition)
-_TEST_PERIOD = 24   # hourly readings, daily cycle
+_TEST_PERIOD = 24  # hourly readings, daily cycle
 
 # We need a large enough business-day history that STL has a stable
 # baseline.  The STL_MIN_HISTORY_OBSERVATIONS default is 48; we supply
@@ -80,12 +77,19 @@ def _build_business_day_readings(
         calendar.append(make_calendar_entry(current_date, DayType.BUSINESS_DAY))
         for hour in range(24):
             ts = datetime.datetime(
-                current_date.year, current_date.month, current_date.day,
-                hour, 0, 0, tzinfo=datetime.timezone.utc,
+                current_date.year,
+                current_date.month,
+                current_date.day,
+                hour,
+                0,
+                0,
+                tzinfo=datetime.UTC,
             )
-            kwh = _BUSINESS_BASE_KWH + _BUSINESS_PEAK_KWH * math.sin(
-                math.pi * max(0, hour - 6) / 14
-            ) if 6 <= hour <= 20 else _BUSINESS_BASE_KWH
+            kwh = (
+                _BUSINESS_BASE_KWH + _BUSINESS_PEAK_KWH * math.sin(math.pi * max(0, hour - 6) / 14)
+                if 6 <= hour <= 20
+                else _BUSINESS_BASE_KWH
+            )
             readings.append(make_reading(ts, round(kwh, 4)))
     return readings, calendar
 
@@ -103,8 +107,13 @@ def _build_near_zero_readings(
         current_date = start_date + datetime.timedelta(days=day_offset)
         for hour in range(24):
             ts = datetime.datetime(
-                current_date.year, current_date.month, current_date.day,
-                hour, 0, 0, tzinfo=datetime.timezone.utc,
+                current_date.year,
+                current_date.month,
+                current_date.day,
+                hour,
+                0,
+                0,
+                tzinfo=datetime.UTC,
             )
             readings.append(make_reading(ts, _STANDBY_KWH))
     return readings
@@ -119,7 +128,7 @@ class TestCalendarRegressionHoliday:
     """
 
     # Dates for the initial business-day history block (establishes baseline)
-    _HISTORY_START = datetime.date(2026, 1, 5)   # Monday
+    _HISTORY_START = datetime.date(2026, 1, 5)  # Monday
     # Dates for the near-zero readings (used in both scenarios)
     _SCENARIO_START = datetime.date(2026, 1, 12)  # 5 working days later
 
@@ -163,12 +172,9 @@ class TestCalendarRegressionHoliday:
 
         # 6. Extract only the scenario-window results
         scenario_dates = {
-            self._SCENARIO_START + datetime.timedelta(days=d)
-            for d in range(_N_HOLIDAY_DAYS)
+            self._SCENARIO_START + datetime.timedelta(days=d) for d in range(_N_HOLIDAY_DAYS)
         }
-        scenario_results = [
-            r for r in all_results if r.ts.date() in scenario_dates
-        ]
+        scenario_results = [r for r in all_results if r.ts.date() in scenario_dates]
         return scenario_results
 
     # ---------------------------------------------------------------- #
@@ -286,9 +292,7 @@ class TestCalendarRegressionHoliday:
         business_anomalous = [r for r in business_results if r.is_anomalous]
 
         # Holiday: zero anomalies (or all low_data_quality)
-        holiday_ok = len(holiday_anomalous) == 0 or all(
-            r.low_data_quality for r in holiday_results
-        )
+        holiday_ok = len(holiday_anomalous) == 0 or all(r.low_data_quality for r in holiday_results)
         # Business: at least one anomaly (or all low_data_quality as graceful degrade)
         business_ok = len(business_anomalous) > 0 or all(
             r.low_data_quality for r in business_results
@@ -323,13 +327,16 @@ class TestCalendarRegressionWeekend:
         calendar = []
         for day_offset in range(8):
             current_date = start + datetime.timedelta(days=day_offset)
-            calendar.append(
-                make_calendar_entry(current_date, DayType.WEEKEND)
-            )
+            calendar.append(make_calendar_entry(current_date, DayType.WEEKEND))
             for hour in range(24):
                 ts = datetime.datetime(
-                    current_date.year, current_date.month, current_date.day,
-                    hour, 0, 0, tzinfo=datetime.timezone.utc,
+                    current_date.year,
+                    current_date.month,
+                    current_date.day,
+                    hour,
+                    0,
+                    0,
+                    tzinfo=datetime.UTC,
                 )
                 # Weekend: lower, flatter profile (no daytime peak)
                 kwh = 3.0 + 1.0 * math.sin(math.pi * hour / 23)
@@ -360,13 +367,16 @@ class TestCalendarRegressionDeclaredClosure:
         calendar = []
         for day_offset in range(3):
             current_date = start + datetime.timedelta(days=day_offset)
-            calendar.append(
-                make_calendar_entry(current_date, DayType.DECLARED_CLOSURE)
-            )
+            calendar.append(make_calendar_entry(current_date, DayType.DECLARED_CLOSURE))
             for hour in range(24):
                 ts = datetime.datetime(
-                    current_date.year, current_date.month, current_date.day,
-                    hour, 0, 0, tzinfo=datetime.timezone.utc,
+                    current_date.year,
+                    current_date.month,
+                    current_date.day,
+                    hour,
+                    0,
+                    0,
+                    tzinfo=datetime.UTC,
                 )
                 readings.append(make_reading(ts, 0.2))  # near-zero
 

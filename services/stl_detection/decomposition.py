@@ -32,6 +32,7 @@ Key design decisions
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -50,9 +51,9 @@ class STLDecompositionResult:
     fills any internal NaN via its own smoothing).
     """
 
-    trend: np.ndarray
-    seasonal: np.ndarray
-    residual: np.ndarray
+    trend: np.ndarray[Any, np.dtype[np.float64]]
+    seasonal: np.ndarray[Any, np.dtype[np.float64]]
+    residual: np.ndarray[Any, np.dtype[np.float64]]
     index: pd.DatetimeIndex  # original timestamps, for alignment
 
 
@@ -174,8 +175,8 @@ def fit_stl(
 
 
 def compute_residual_zscores(
-    residuals: np.ndarray,
-) -> np.ndarray:
+    residuals: np.ndarray[Any, np.dtype[np.float64]],
+) -> np.ndarray[Any, np.dtype[np.float64]]:
     """Compute robust z-scores for an array of STL residuals.
 
     Uses the median absolute deviation (MAD) estimator instead of
@@ -219,13 +220,13 @@ def compute_residual_zscores(
     if scale < 1e-6:
         # Scale floor prevents floating-point noise amplification in flat series
         scale = 1e-6
-    return (residuals - median) / scale
+    return np.asarray((residuals - median) / scale, dtype=np.float64)
 
 
 def flag_anomalies(
-    zscores: np.ndarray,
+    zscores: np.ndarray[Any, np.dtype[np.float64]],
     config: STLDetectionConfig,
-) -> np.ndarray:
+) -> np.ndarray[Any, np.dtype[np.bool_]]:
     """Return a boolean mask where |zscore| > anomaly threshold.
 
     Parameters
@@ -240,4 +241,4 @@ def flag_anomalies(
     np.ndarray[bool]
         True at positions where the reading is anomalous.
     """
-    return np.abs(zscores) > config.residual_zscore_anomaly_threshold
+    return np.asarray(np.abs(zscores) > config.residual_zscore_anomaly_threshold, dtype=np.bool_)

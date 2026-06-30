@@ -40,7 +40,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, model_validator
 
 
-class DayType(str, Enum):
+class DayType(str, Enum):  # noqa: UP042 (str mixin preserved for value-based equality/serialization)
     """Valid day-type classifications from building_calendar.
 
     TRD §3.3 / DATA_AND_MODEL_STRATEGY §3.5 mandate these exact four values.
@@ -126,9 +126,7 @@ class STLResidualResult(BaseModel):
                     "when low_data_quality=True — do not emit unreliable scores."
                 )
             if self.low_data_quality_reason is None:
-                raise ValueError(
-                    "low_data_quality_reason must be set when low_data_quality=True."
-                )
+                raise ValueError("low_data_quality_reason must be set when low_data_quality=True.")
         return self
 
 

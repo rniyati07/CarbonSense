@@ -26,10 +26,10 @@ from services.stl_detection.exceptions import InsufficientHistoryError
 def _make_series(n_periods: int = 3, period: int = 24) -> pd.Series:
     """Synthetic sinusoidal series: trend=0, clear seasonal, residual≈0."""
     n = n_periods * period
-    start = datetime.datetime(2026, 1, 5, 0, 0, 0, tzinfo=datetime.timezone.utc)
+    start = datetime.datetime(2026, 1, 5, 0, 0, 0, tzinfo=datetime.UTC)
     index = [start + datetime.timedelta(hours=h) for h in range(n)]
     values = [10.0 + 5.0 * math.sin(2 * math.pi * h / period) for h in range(n)]
-    return pd.Series(values, index=pd.DatetimeIndex(index, tz=datetime.timezone.utc))
+    return pd.Series(values, index=pd.DatetimeIndex(index, tz=datetime.UTC))
 
 
 # ------------------------------------------------------------------ #
@@ -132,7 +132,7 @@ class TestFitSTL:
     def test_raises_on_all_nan_series(self) -> None:
         cfg = STLDetectionConfig()
         n = cfg.stl_min_history_observations + 10
-        start = datetime.datetime(2026, 1, 5, tzinfo=datetime.timezone.utc)
+        start = datetime.datetime(2026, 1, 5, tzinfo=datetime.UTC)
         index = [start + datetime.timedelta(hours=h) for h in range(n)]
         series = pd.Series([float("nan")] * n, index=pd.DatetimeIndex(index))
         with pytest.raises(ValueError, match="only NaN"):

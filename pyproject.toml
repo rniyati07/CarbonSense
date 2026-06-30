@@ -55,6 +55,7 @@ dev = [
     "mypy>=1.10",
     "pip-tools>=7.4",
     "testcontainers[kafka]>=4.4",
+    "pandas-stubs>=2.2",
 ]
 ml = [
     "torch>=2.3",
@@ -113,3 +114,7 @@ python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = "statsmodels.*"
+ignore_missing_imports = true # statsmodels ships no py.typed marker / stubs upstream

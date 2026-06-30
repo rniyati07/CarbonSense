@@ -10,7 +10,6 @@ These tests guard the ENG-3c → ENG-3d-1 integration contract.
 from __future__ import annotations
 
 import datetime
-import uuid
 
 import pytest
 
@@ -24,7 +23,7 @@ from tests.unit.services.stl_detection.conftest import (
     build_sufficient_business_day_series,
 )
 
-NOW = datetime.datetime(2026, 1, 5, 9, 0, 0, tzinfo=datetime.timezone.utc)
+NOW = datetime.datetime(2026, 1, 5, 9, 0, 0, tzinfo=datetime.UTC)
 
 
 def _make_result(
@@ -111,9 +110,7 @@ class TestFeatureSetV1STLFields:
         for stl_result in results:
             feature = FeatureSetV1STLFields.from_stl_result(stl_result)
             # No exception → contract satisfied
-            assert feature.day_type in {
-                "business_day", "weekend", "holiday", "declared_closure"
-            }
+            assert feature.day_type in {"business_day", "weekend", "holiday", "declared_closure"}
 
     def test_feature_fields_correct_types(self) -> None:
         result = _make_result()
@@ -131,8 +128,11 @@ class TestFeatureSetV1STLFields:
         d = feature.model_dump()
 
         assert set(d.keys()) >= {
-            "stl_residual", "residual_zscore", "residual_magnitude",
-            "day_type", "low_data_quality",
+            "stl_residual",
+            "residual_zscore",
+            "residual_magnitude",
+            "day_type",
+            "low_data_quality",
         }
 
     def test_feature_from_stl_result_cold_start_no_crash(self) -> None:

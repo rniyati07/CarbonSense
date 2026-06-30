@@ -10,6 +10,7 @@ import datetime
 import uuid
 
 import pytest
+from pydantic import ValidationError
 
 from services.stl_detection.models import (
     CalendarEntry,
@@ -22,7 +23,7 @@ TENANT_ID = uuid.UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")
 CIRCUIT_ID = uuid.UUID("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee")
 BUILDING_ID = uuid.UUID("dddddddd-dddd-dddd-dddd-dddddddddddd")
 
-NOW = datetime.datetime(2026, 1, 5, 9, 0, 0, tzinfo=datetime.timezone.utc)
+NOW = datetime.datetime(2026, 1, 5, 9, 0, 0, tzinfo=datetime.UTC)
 
 
 @pytest.mark.unit
@@ -34,7 +35,7 @@ class TestDayType:
         assert DayType.DECLARED_CLOSURE == "declared_closure"
 
     def test_invalid_day_type_raises(self) -> None:
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             CalendarEntry(
                 building_id=BUILDING_ID,
                 date=datetime.date(2026, 1, 5),
@@ -107,7 +108,7 @@ class TestSTLResidualResult:
 
     def test_low_data_quality_with_zscore_raises(self) -> None:
         """low_data_quality=True + residual_zscore is set → validation error."""
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             STLResidualResult(
                 tenant_id=TENANT_ID,
                 circuit_id=CIRCUIT_ID,
@@ -120,7 +121,7 @@ class TestSTLResidualResult:
 
     def test_low_data_quality_without_reason_raises(self) -> None:
         """low_data_quality=True with no reason → validation error."""
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             STLResidualResult(
                 tenant_id=TENANT_ID,
                 circuit_id=CIRCUIT_ID,

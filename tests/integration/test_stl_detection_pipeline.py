@@ -29,13 +29,11 @@ import pytest
 
 from models.feature_store.feature_set_v1 import FeatureSetV1STLFields
 from services.stl_detection.config import STLDetectionConfig
-from services.stl_detection.models import DayType, STLResidualResult
+from services.stl_detection.models import DayType
 from services.stl_detection.repository import InMemoryCalendarRepository
 from services.stl_detection.service import STLDetectionService
 from tests.unit.services.stl_detection.conftest import (
     BUILDING_ID,
-    CIRCUIT_ID,
-    TENANT_ID,
     make_calendar_entry,
     make_reading,
 )
@@ -46,14 +44,14 @@ pytestmark = pytest.mark.integration
 # Fixture constants
 # ------------------------------------------------------------------ #
 
-_BD_START = datetime.date(2026, 1, 5)       # Monday — business-day history start
-_HOL_START = datetime.date(2026, 3, 30)     # Holiday block start
-_SPIKE_DATE = datetime.date(2026, 3, 3)     # Date of injected anomaly
-_SPIKE_HOUR = 14                            # Hour of injected anomaly
-_SPIKE_MULTIPLIER = 4.0                     # Factor above normal
+_BD_START = datetime.date(2026, 1, 5)  # Monday — business-day history start
+_HOL_START = datetime.date(2026, 3, 30)  # Holiday block start
+_SPIKE_DATE = datetime.date(2026, 3, 3)  # Date of injected anomaly
+_SPIKE_HOUR = 14  # Hour of injected anomaly
+_SPIKE_MULTIPLIER = 4.0  # Factor above normal
 
-_N_BUSINESS_DAYS = 60   # ~3 months Mon–Fri
-_N_HOLIDAY_DAYS = 4     # 4 holiday days (96 readings → above 48 threshold)
+_N_BUSINESS_DAYS = 60  # ~3 months Mon–Fri
+_N_HOLIDAY_DAYS = 4  # 4 holiday days (96 readings → above 48 threshold)
 
 _BUSINESS_BASE_KWH = 5.0
 _BUSINESS_AMPLITUDE = 8.0
@@ -82,17 +80,22 @@ def _build_full_window() -> tuple[list, list]:
         if current_date.weekday() >= 5:  # skip Saturday/Sunday
             continue
 
-        calendar_entries.append(
-            make_calendar_entry(current_date, DayType.BUSINESS_DAY)
-        )
+        calendar_entries.append(make_calendar_entry(current_date, DayType.BUSINESS_DAY))
         for hour in range(24):
             ts = datetime.datetime(
-                current_date.year, current_date.month, current_date.day,
-                hour, 0, 0, tzinfo=datetime.timezone.utc,
+                current_date.year,
+                current_date.month,
+                current_date.day,
+                hour,
+                0,
+                0,
+                tzinfo=datetime.UTC,
             )
-            base = _BUSINESS_BASE_KWH + _BUSINESS_AMPLITUDE * math.sin(
-                math.pi * max(0, hour - 7) / 11
-            ) if 7 <= hour <= 18 else _BUSINESS_BASE_KWH
+            base = (
+                _BUSINESS_BASE_KWH + _BUSINESS_AMPLITUDE * math.sin(math.pi * max(0, hour - 7) / 11)
+                if 7 <= hour <= 18
+                else _BUSINESS_BASE_KWH
+            )
 
             # Inject spike on the specific date and hour
             if current_date == _SPIKE_DATE and hour == _SPIKE_HOUR:
@@ -106,13 +109,16 @@ def _build_full_window() -> tuple[list, list]:
     # ---- Holiday days ----
     for d in range(_N_HOLIDAY_DAYS):
         current_date = _HOL_START + datetime.timedelta(days=d)
-        calendar_entries.append(
-            make_calendar_entry(current_date, DayType.HOLIDAY)
-        )
+        calendar_entries.append(make_calendar_entry(current_date, DayType.HOLIDAY))
         for hour in range(24):
             ts = datetime.datetime(
-                current_date.year, current_date.month, current_date.day,
-                hour, 0, 0, tzinfo=datetime.timezone.utc,
+                current_date.year,
+                current_date.month,
+                current_date.day,
+                hour,
+                0,
+                0,
+                tzinfo=datetime.UTC,
             )
             readings.append(make_reading(ts, _STANDBY_KWH))
 
@@ -165,8 +171,7 @@ class TestSTLPipelineHappyPath:
         results = service.analyse_circuit_window(readings, calendar)
 
         spike_results = [
-            r for r in results
-            if r.ts.date() == _SPIKE_DATE and r.ts.hour == _SPIKE_HOUR
+            r for r in results if r.ts.date() == _SPIKE_DATE and r.ts.hour == _SPIKE_HOUR
         ]
         assert len(spike_results) == 1, "Expected exactly one spike result"
         spike = spike_results[0]
@@ -243,9 +248,7 @@ class TestSTLPipelineFeatureOutput:
 
         for stl_result in results:
             feature = FeatureSetV1STLFields.from_stl_result(stl_result)
-            assert feature.day_type in {
-                "business_day", "weekend", "holiday", "declared_closure"
-            }
+            assert feature.day_type in {"business_day", "weekend", "holiday", "declared_closure"}
 
     def test_spike_result_has_high_zscore_in_feature(self) -> None:
         """The spike's feature row must carry a high residual_zscore."""
@@ -256,8 +259,7 @@ class TestSTLPipelineFeatureOutput:
         results = service.analyse_circuit_window(readings, calendar)
 
         spike = next(
-            (r for r in results
-             if r.ts.date() == _SPIKE_DATE and r.ts.hour == _SPIKE_HOUR),
+            (r for r in results if r.ts.date() == _SPIKE_DATE and r.ts.hour == _SPIKE_HOUR),
             None,
         )
         assert spike is not None
@@ -280,7 +282,7 @@ class TestSTLPipelineReproducibility:
         results_b = service.analyse_circuit_window(readings, calendar)
 
         assert len(results_a) == len(results_b)
-        for a, b in zip(results_a, results_b):
+        for a, b in zip(results_a, results_b, strict=True):
             assert a.ts == b.ts
             assert a.is_anomalous == b.is_anomalous
             assert a.residual_zscore == b.residual_zscore
@@ -304,7 +306,7 @@ class TestSTLPipelineRepoIntegration:
         repo_results = service_repo.analyse_circuit_window_with_repo(readings, BUILDING_ID)
 
         assert len(direct_results) == len(repo_results)
-        for a, b in zip(direct_results, repo_results):
+        for a, b in zip(direct_results, repo_results, strict=True):
             assert a.ts == b.ts
             assert a.is_anomalous == b.is_anomalous
             assert a.residual_zscore == b.residual_zscore

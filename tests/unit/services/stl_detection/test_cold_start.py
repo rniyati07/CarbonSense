@@ -20,9 +20,6 @@ from services.stl_detection.config import STLDetectionConfig
 from services.stl_detection.models import DayType
 from services.stl_detection.service import STLDetectionService
 from tests.unit.services.stl_detection.conftest import (
-    BUILDING_ID,
-    CIRCUIT_ID,
-    TENANT_ID,
     build_business_day_series,
     build_sufficient_business_day_series,
     make_calendar_entry,
@@ -57,12 +54,9 @@ class TestColdStartDetection:
 
         for r in results:
             assert r.residual_zscore is None, (
-                "residual_zscore must be None in cold-start — "
-                "unreliable scores must not be emitted"
+                "residual_zscore must be None in cold-start — unreliable scores must not be emitted"
             )
-            assert r.residual_magnitude is None, (
-                "residual_magnitude must be None in cold-start"
-            )
+            assert r.residual_magnitude is None, "residual_magnitude must be None in cold-start"
             assert r.stl_residual is None
             assert r.stl_trend is None
             assert r.stl_seasonal is None
@@ -135,7 +129,7 @@ class TestColdStartDetection:
         hol_readings = []
         hol_calendar = []
         for h in range(24):
-            ts = datetime.datetime(2026, 2, 10, h, 0, 0, tzinfo=datetime.timezone.utc)
+            ts = datetime.datetime(2026, 2, 10, h, 0, 0, tzinfo=datetime.UTC)
             hol_readings.append(make_reading(ts, 0.3))
         hol_calendar.append(make_calendar_entry(hol_start, DayType.HOLIDAY))
 

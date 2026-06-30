@@ -124,8 +124,13 @@ class TestAnalyseCircuitWindowCohortSeparation:
             we_calendar.append(make_calendar_entry(date, DayType.WEEKEND))
             for h in range(24):
                 ts = datetime.datetime(
-                    date.year, date.month, date.day, h, 0, 0,
-                    tzinfo=datetime.timezone.utc,
+                    date.year,
+                    date.month,
+                    date.day,
+                    h,
+                    0,
+                    0,
+                    tzinfo=datetime.UTC,
                 )
                 we_readings.append(make_reading(ts, 3.0 + math.sin(h)))
 

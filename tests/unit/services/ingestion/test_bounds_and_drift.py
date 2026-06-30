@@ -21,10 +21,10 @@ def _make_reading(kwh: float, circuit_id: UUID = HVAC_CIRCUIT_ID) -> NormalizedR
     return NormalizedReading(
         tenant_id=TENANT_ID,
         circuit_id=circuit_id,
-        ts=datetime.datetime(2026, 1, 15, 12, 0, tzinfo=datetime.timezone.utc),
+        ts=datetime.datetime(2026, 1, 15, 12, 0, tzinfo=datetime.UTC),
         kwh=kwh,
         source_system="csv_upload",
-        ingestion_timestamp=datetime.datetime.now(datetime.timezone.utc),
+        ingestion_timestamp=datetime.datetime.now(datetime.UTC),
         normalization_version="v1.0.0",
     )
 

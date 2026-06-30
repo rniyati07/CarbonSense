@@ -65,10 +65,7 @@ class FeatureSetV1STLFields(BaseModel):
     # The primary residual signal (None when low_data_quality=True)
     stl_residual: float | None = Field(
         default=None,
-        description=(
-            "Raw STL residual: kwh - trend - seasonal.  "
-            "None when low_data_quality=True."
-        ),
+        description=("Raw STL residual: kwh - trend - seasonal.  None when low_data_quality=True."),
     )
 
     # Robust z-score for anomaly severity (None when low_data_quality=True)
@@ -83,10 +80,7 @@ class FeatureSetV1STLFields(BaseModel):
     # Absolute magnitude for use as a non-directional feature
     residual_magnitude: float | None = Field(
         default=None,
-        description=(
-            "abs(stl_residual).  Non-negative.  "
-            "None when low_data_quality=True."
-        ),
+        description=("abs(stl_residual).  Non-negative.  None when low_data_quality=True."),
     )
 
     # Calendar classification (always populated — hard requirement from TRD §3.3)
