@@ -38,13 +38,17 @@ class TestInMemoryBoundsRepository:
 class TestFileBoundsRepository:
     def test_loads_from_json(self, tmp_path: Path) -> None:
         bounds_file = tmp_path / "bounds.json"
-        bounds_file.write_text(json.dumps({
-            "version": "2.0.0",
-            "circuit_type_bounds": {
-                "hvac": {"min_kwh": 0.0, "max_kwh": 1500.0},
-            },
-            "default_bounds": {"min_kwh": 0.0, "max_kwh": 3000.0},
-        }))
+        bounds_file.write_text(
+            json.dumps(
+                {
+                    "version": "2.0.0",
+                    "circuit_type_bounds": {
+                        "hvac": {"min_kwh": 0.0, "max_kwh": 1500.0},
+                    },
+                    "default_bounds": {"min_kwh": 0.0, "max_kwh": 3000.0},
+                }
+            )
+        )
 
         repo = FileBoundsRepository(bounds_file)
         config = repo.get()
@@ -54,23 +58,31 @@ class TestFileBoundsRepository:
 
     def test_hot_reload_on_file_change(self, tmp_path: Path) -> None:
         bounds_file = tmp_path / "bounds.json"
-        bounds_file.write_text(json.dumps({
-            "version": "1.0.0",
-            "circuit_type_bounds": {
-                "hvac": {"min_kwh": 0.0, "max_kwh": 2000.0},
-            },
-        }))
+        bounds_file.write_text(
+            json.dumps(
+                {
+                    "version": "1.0.0",
+                    "circuit_type_bounds": {
+                        "hvac": {"min_kwh": 0.0, "max_kwh": 2000.0},
+                    },
+                }
+            )
+        )
 
         repo = FileBoundsRepository(bounds_file)
         assert repo.get().circuit_type_bounds["hvac"].max_kwh == 2000.0
 
         time.sleep(0.05)
-        bounds_file.write_text(json.dumps({
-            "version": "2.0.0",
-            "circuit_type_bounds": {
-                "hvac": {"min_kwh": 0.0, "max_kwh": 999.0},
-            },
-        }))
+        bounds_file.write_text(
+            json.dumps(
+                {
+                    "version": "2.0.0",
+                    "circuit_type_bounds": {
+                        "hvac": {"min_kwh": 0.0, "max_kwh": 999.0},
+                    },
+                }
+            )
+        )
 
         config = repo.get()
         assert config.circuit_type_bounds["hvac"].max_kwh == 999.0
@@ -84,14 +96,18 @@ class TestFileBoundsRepository:
 
     def test_gate_uses_bounds_repo(self, tmp_path: Path) -> None:
         bounds_file = tmp_path / "bounds.json"
-        bounds_file.write_text(json.dumps({
-            "version": "1.0.0",
-            "circuit_type_bounds": {
-                "hvac": {"min_kwh": 0.0, "max_kwh": 0.001},
-                "lighting": {"min_kwh": 0.0, "max_kwh": 0.001},
-            },
-            "default_bounds": {"min_kwh": 0.0, "max_kwh": 0.001},
-        }))
+        bounds_file.write_text(
+            json.dumps(
+                {
+                    "version": "1.0.0",
+                    "circuit_type_bounds": {
+                        "hvac": {"min_kwh": 0.0, "max_kwh": 0.001},
+                        "lighting": {"min_kwh": 0.0, "max_kwh": 0.001},
+                    },
+                    "default_bounds": {"min_kwh": 0.0, "max_kwh": 0.001},
+                }
+            )
+        )
 
         from services.ingestion.quality_gate import DataQualityGate
         from tests.unit.services.ingestion.conftest import make_batch

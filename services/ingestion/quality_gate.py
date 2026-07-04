@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import datetime
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from uuid import UUID
 from zoneinfo import ZoneInfo
+
+import pandas as pd
 
 from services.ingestion.bounds_and_drift import check_bounds_and_drift
 from services.ingestion.config import DataQualityGateConfig
@@ -17,8 +19,6 @@ from services.ingestion.models import (
 )
 from services.ingestion.normalization import normalize_batch, resolve_columns
 from services.ingestion.sensor_fault import detect_sensor_faults
-
-import pandas as pd
 
 if TYPE_CHECKING:
     from services.ingestion.bounds_repository import BoundsRepository
@@ -48,7 +48,7 @@ def _extract_raw_timestamps(
                 ts = pd.Timestamp(str(ts_raw)).to_pydatetime()
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=tz)
-            ts = ts.astimezone(datetime.timezone.utc)
+            ts = ts.astimezone(datetime.UTC)
             result[circuit_info.circuit_id].append(ts)
         except (ValueError, TypeError):
             continue
@@ -70,10 +70,7 @@ class DataQualityGate:
 
     def process_batch(self, batch: RawIngestionBatch) -> BatchQualityResult:
         raw_columns = list(batch.raw_rows[0].keys()) if batch.raw_rows else []
-        circuit_types = {
-            info.circuit_id: info.circuit_type
-            for info in batch.circuit_map.values()
-        }
+        circuit_types = {info.circuit_id: info.circuit_type for info in batch.circuit_map.values()}
 
         raw_ts_by_circuit = _extract_raw_timestamps(batch, self._config)
 

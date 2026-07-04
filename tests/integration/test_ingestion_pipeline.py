@@ -18,15 +18,12 @@ import pytest
 from orchestration.events.kafka.schemas.base import BaseEvent
 from services.ingestion.alert_store import InMemoryAlertStore
 from services.ingestion.bounds_repository import InMemoryBoundsRepository
-from services.ingestion.config import BoundsConfig, BoundsEntry, DataQualityGateConfig
+from services.ingestion.config import BoundsConfig, BoundsEntry
 from services.ingestion.event_publisher import DataQualityEventPublisher
-from services.ingestion.models import CircuitInfo
 from services.ingestion.quality_gate import DataQualityGate
 from shared.config.kafka import KafkaSettings
 from tests.unit.services.ingestion.conftest import (
     BUILDING_ID,
-    HVAC_CIRCUIT_ID,
-    LIGHT_CIRCUIT_ID,
     TENANT_ID,
     make_batch,
 )
@@ -149,9 +146,7 @@ class TestSchemaDriftEndToEnd:
         if result.overall_status == "quarantined":
             pytest.skip("Batch was fully quarantined, not degraded")
 
-        drift_issues = [
-            i for i in result.quality_issues if i.issue_type == "schema_drift"
-        ]
+        drift_issues = [i for i in result.quality_issues if i.issue_type == "schema_drift"]
         assert len(drift_issues) > 0
 
         outcome = publisher.publish_or_alert(result)
@@ -186,9 +181,7 @@ class TestGapBeyondBoundEndToEnd:
         batch = make_batch("gap_beyond_bound.csv")
         result = gate.process_batch(batch)
 
-        gap_issues = [
-            i for i in result.quality_issues if i.issue_type == "gap_beyond_bound"
-        ]
+        gap_issues = [i for i in result.quality_issues if i.issue_type == "gap_beyond_bound"]
         assert len(gap_issues) > 0
         assert result.quarantined_count > 0
 
@@ -219,9 +212,7 @@ class TestSensorFaultEndToEnd:
         batch = make_batch("stuck_at_value.csv")
         result = gate.process_batch(batch)
 
-        stuck_issues = [
-            i for i in result.quality_issues if i.issue_type == "stuck_at_value"
-        ]
+        stuck_issues = [i for i in result.quality_issues if i.issue_type == "stuck_at_value"]
         assert len(stuck_issues) > 0
         assert result.overall_status in ("degraded", "quarantined")
 
@@ -238,14 +229,6 @@ class TestBoundsRepositoryIntegration:
     """Verify hot-reloadable bounds flow through the full pipeline."""
 
     def test_bounds_repo_overrides_config_defaults(self) -> None:
-        producer = RecordingKafkaProducer()
-        alert_store = InMemoryAlertStore()
-        publisher = DataQualityEventPublisher(
-            producer=producer,
-            settings=KafkaSettings(),
-            alert_store=alert_store,
-        )
-
         repo = InMemoryBoundsRepository(
             BoundsConfig(
                 circuit_type_bounds={
@@ -260,9 +243,7 @@ class TestBoundsRepositoryIntegration:
         batch = make_batch("clean_batch.csv")
         result = gate.process_batch(batch)
 
-        implausible = [
-            i for i in result.quality_issues if i.issue_type == "implausible_value"
-        ]
+        implausible = [i for i in result.quality_issues if i.issue_type == "implausible_value"]
         assert len(implausible) > 0
 
     def test_bounds_repo_hot_reload_mid_pipeline(self) -> None:
