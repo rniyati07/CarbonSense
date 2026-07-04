@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from uuid import UUID, uuid4
+from datetime import UTC, datetime
+from uuid import UUID
 
 import numpy as np
 import pytest
@@ -29,8 +29,8 @@ FEATURE_NAMES = [
     "peak_hour_ratio",
 ]
 
-EVIDENCE_START = datetime(2026, 6, 1, 22, 0, 0, tzinfo=timezone.utc)
-EVIDENCE_END = datetime(2026, 6, 2, 5, 0, 0, tzinfo=timezone.utc)
+EVIDENCE_START = datetime(2026, 6, 1, 22, 0, 0, tzinfo=UTC)
+EVIDENCE_END = datetime(2026, 6, 2, 5, 0, 0, tzinfo=UTC)
 
 
 @pytest.fixture()
@@ -84,9 +84,9 @@ def top_features_sample() -> list[TopFeature]:
 def trained_iso_forest() -> IsolationForest:
     """A minimal trained IsolationForest on synthetic data."""
     rng = np.random.default_rng(42)
-    X = rng.standard_normal((200, len(FEATURE_NAMES)))
+    x = rng.standard_normal((200, len(FEATURE_NAMES)))
     clf = IsolationForest(n_estimators=10, random_state=42, contamination=0.05)
-    clf.fit(X)
+    clf.fit(x)
     return clf
 
 
@@ -104,9 +104,9 @@ def normal_feature_row() -> dict[str, float]:
 @pytest.fixture()
 def anomalous_feature_row() -> dict[str, float]:
     return {
-        "after_hours_kwh_ratio": 1.8,   # very high after-hours usage
-        "weekend_floor_load": 0.95,     # high weekend load
-        "stl_residual_z": 4.2,          # large STL residual
+        "after_hours_kwh_ratio": 1.8,  # very high after-hours usage
+        "weekend_floor_load": 0.95,  # high weekend load
+        "stl_residual_z": 4.2,  # large STL residual
         "rolling_24h_kwh_mean": 320.0,  # above baseline
-        "peak_hour_ratio": 2.3,         # extreme peak ratio
+        "peak_hour_ratio": 2.3,  # extreme peak ratio
     }

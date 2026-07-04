@@ -28,7 +28,8 @@ from services.reporting.prompt_builder import SCHEMA_EMPHASIS_SUFFIX, build_user
 logger = logging.getLogger(__name__)
 
 # System prompt — exact text per TRD v2.0 §5.2. DO NOT PARAPHRASE OR MODIFY WITHOUT A CHANGE-REVIEW.
-SYSTEM_PROMPT: str = """You are CarbonSense's reporting assistant. You convert structured building-energy
+SYSTEM_PROMPT: str = """\
+You are CarbonSense's reporting assistant. You convert structured building-energy
 findings into a plain-language Carbon Action Plan for a facility manager who is not
 a data scientist.
 
@@ -137,7 +138,6 @@ class Narrator:
 
         # Fallback — deterministic, always returns a complete ActionPlan
         return self._fallback.generate(request)
-
 
     def _call_llm(self, user_message: str) -> str:
         """Call the Claude API and return the raw text response.

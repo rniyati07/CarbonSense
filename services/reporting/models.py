@@ -18,7 +18,6 @@ from pydantic import BaseModel, Field
 
 from services.explainability.models import ExplainabilityBundle
 
-
 # ---------------------------------------------------------------------------
 # Input: what the Reporting Service receives
 # ---------------------------------------------------------------------------
@@ -54,9 +53,7 @@ class FindingWithBundle(BaseModel):
     finding_id: UUID
     building_id: UUID
     circuit_id: UUID | None = None
-    layer_origin: str = Field(
-        ..., description="Comma-separated layers that produced this finding"
-    )
+    layer_origin: str = Field(..., description="Comma-separated layers that produced this finding")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Calibrated confidence")
     explainability_bundle: ExplainabilityBundle
 
