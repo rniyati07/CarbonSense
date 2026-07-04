@@ -134,47 +134,49 @@ async def test_drift_detection_schedule_history_retrievable() -> None:
     Triggers the schedule immediately, waits for one execution,
     and verifies the workflow history is accessible.
     """
-    async with await WorkflowEnvironment.start_local() as env:
-        async with Worker(
+    async with (
+        await WorkflowEnvironment.start_local() as env,
+        Worker(
             env.client,
             task_queue="test-queue",
             workflows=[DriftDetectionWorkflow],
             activities=[drift_detection_activity],
-        ):
-            schedule_id = f"drift-hist-test"
-            await env.client.create_schedule(
-                schedule_id,
-                Schedule(
-                    action=ScheduleActionStartWorkflow(
-                        DriftDetectionWorkflow.run,
-                        DriftDetectionInput(tenant_id="t-hist", building_id="b-hist"),
-                        id="drift-hist-wf",
-                        task_queue="test-queue",
-                    ),
-                    spec=ScheduleSpec(
-                        intervals=[ScheduleIntervalSpec(every=timedelta(hours=24))],
-                    ),
+        ),
+    ):
+        schedule_id = "drift-hist-test"
+        await env.client.create_schedule(
+            schedule_id,
+            Schedule(
+                action=ScheduleActionStartWorkflow(
+                    DriftDetectionWorkflow.run,
+                    DriftDetectionInput(tenant_id="t-hist", building_id="b-hist"),
+                    id="drift-hist-wf",
+                    task_queue="test-queue",
                 ),
-                trigger_immediately=True,
-            )
+                spec=ScheduleSpec(
+                    intervals=[ScheduleIntervalSpec(every=timedelta(hours=24))],
+                ),
+            ),
+            trigger_immediately=True,
+        )
 
-            # Wait for at least one execution
-            import asyncio
+        # Wait for at least one execution
+        import asyncio
 
-            for _ in range(30):
-                desc = await env.client.get_schedule_handle(schedule_id).describe()
-                if desc.info.num_actions > 0:
-                    break
-                await asyncio.sleep(0.5)
+        for _ in range(30):
+            desc = await env.client.get_schedule_handle(schedule_id).describe()
+            if desc.info.num_actions > 0:
+                break
+            await asyncio.sleep(0.5)
 
-            assert desc.info.num_actions > 0
+        assert desc.info.num_actions > 0
 
-            # Retrieve workflow history
-            wf_handle = env.client.get_workflow_handle("drift-hist-wf")
-            history = await wf_handle.fetch_history()
-            assert len(history.events) > 0
+        # Retrieve workflow history
+        wf_handle = env.client.get_workflow_handle("drift-hist-wf")
+        history = await wf_handle.fetch_history()
+        assert len(history.events) > 0
 
-            await env.client.get_schedule_handle(schedule_id).delete()
+        await env.client.get_schedule_handle(schedule_id).delete()
 
 
 @pytest.mark.unit

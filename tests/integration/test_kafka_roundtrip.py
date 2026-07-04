@@ -34,8 +34,7 @@ except Exception:
 
 pytestmark = pytest.mark.integration
 skip_reason = (
-    "testcontainers[kafka] not installed" if not HAS_TESTCONTAINERS
-    else "Docker not available"
+    "testcontainers[kafka] not installed" if not HAS_TESTCONTAINERS else "Docker not available"
 )
 skip_if_no_infra = pytest.mark.skipif(
     not (HAS_TESTCONTAINERS and HAS_DOCKER),
