@@ -13,6 +13,7 @@ contain {pct} (abs percentage from shap_value × 100) and {direction} placeholde
 """
 
 from __future__ import annotations
+
 _FEATURE_TEMPLATES: dict[str, str] = {
     # After-hours consumption patterns
     "after_hours_kwh_ratio": (

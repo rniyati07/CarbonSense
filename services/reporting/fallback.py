@@ -107,9 +107,10 @@ class FallbackNarrator:
                     note = _confidence_note(fc.lower, fc.upper)
                     break
 
+            model_name = scenario.scenario_model.replace("_v1", "").replace("_", " ").title()
             actions.append(
                 ActionItem(
-                    title=f"Optimise: {scenario.scenario_model.replace('_v1', '').replace('_', ' ').title()}",
+                    title=f"Optimise: {model_name}",
                     description=description,
                     justifying_finding_ids=scenario.justifying_finding_ids,
                     estimated_co2_saved_kg_per_year=co2_saved,

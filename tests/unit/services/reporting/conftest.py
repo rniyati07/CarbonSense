@@ -1,8 +1,6 @@
-
-
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -15,15 +13,13 @@ from services.explainability.models import (
     TopFeature,
 )
 from services.reporting.models import (
-    ActionItem,
-    ActionPlan,
     FindingWithBundle,
     OptimizationScenario,
     ReportingRequest,
 )
 
-EVIDENCE_START = datetime(2026, 6, 1, 22, 0, 0, tzinfo=timezone.utc)
-EVIDENCE_END = datetime(2026, 6, 2, 5, 0, 0, tzinfo=timezone.utc)
+EVIDENCE_START = datetime(2026, 6, 1, 22, 0, 0, tzinfo=UTC)
+EVIDENCE_END = datetime(2026, 6, 2, 5, 0, 0, tzinfo=UTC)
 
 FINDING_ID_MIXED = UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")
 FINDING_ID_ML_ONLY = UUID("dddddddd-dddd-dddd-dddd-dddddddddddd")
@@ -106,7 +102,9 @@ def ml_only_finding() -> FindingWithBundle:
 
 
 @pytest.fixture()
-def optimization_scenario_for_mixed(mixed_evidence_finding: FindingWithBundle) -> OptimizationScenario:
+def optimization_scenario_for_mixed(
+    mixed_evidence_finding: FindingWithBundle,
+) -> OptimizationScenario:
     return OptimizationScenario(
         scenario_id=uuid4(),
         scenario_model="load_shift_v1",
@@ -151,7 +149,7 @@ def valid_action_plan_json() -> str:
     """A valid LLM response matching the ActionPlan schema."""
     return (
         '{"narrative_summary": "After-hours HVAC usage was detected 41% above normal'
-        ' (confidence 62%-81%). Based on the hvac_after_hours_v3 rule '
+        " (confidence 62%-81%). Based on the hvac_after_hours_v3 rule "
         '(ASHRAE Guideline 36) and supporting SHAP evidence, load-shifting is recommended.",'
         ' "actions": [{'
         '"title": "Schedule HVAC load shift",'
@@ -162,7 +160,8 @@ def valid_action_plan_json() -> str:
         ' "estimated_savings_inr_per_year": 89600.0,'
         ' "effort_level": "Low",'
         ' "payback_months": 0.0,'
-        ' "confidence_note": "Moderate-high confidence (62%-81%): rule and statistical evidence agree."'
+        ' "confidence_note": "Moderate-high confidence (62%-81%): '
+        'rule and statistical evidence agree."'
         "}]}"
     )
 
@@ -172,7 +171,8 @@ def hedged_action_plan_json() -> str:
     """A valid LLM response for an ml_ensemble-only finding — hedged prose."""
     return (
         '{"narrative_summary": "A statistical pattern was detected (no rule citation).'
-        ' Confidence band is wide (32%-68%), indicating lower certainty than a rule-confirmed finding.",'
+        " Confidence band is wide (32%-68%), indicating lower certainty"
+        ' than a rule-confirmed finding.",'
         ' "actions": [{'
         '"title": "Schedule facility inspection",'
         ' "description": "A statistical anomaly was detected. No specific mechanism is confirmed.'
@@ -182,6 +182,7 @@ def hedged_action_plan_json() -> str:
         ' "estimated_savings_inr_per_year": 0.0,'
         ' "effort_level": "Low",'
         ' "payback_months": 0.0,'
-        ' "confidence_note": "Lower confidence (32%-68%): statistical pattern only, no confirming rule."'
+        ' "confidence_note": "Lower confidence (32%-68%): '
+        'statistical pattern only, no confirming rule."'
         "}]}"
     )

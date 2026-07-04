@@ -76,9 +76,7 @@ def build_user_message(request: ReportingRequest) -> str:
     payload = {
         "building": request.building_name,
         "findings": [_finding_payload(f) for f in request.findings],
-        "optimization_scenarios": [
-            _scenario_payload(s) for s in request.optimization_scenarios
-        ],
+        "optimization_scenarios": [_scenario_payload(s) for s in request.optimization_scenarios],
     }
     return json.dumps(payload, ensure_ascii=False, indent=2)
 

@@ -38,9 +38,7 @@ class TestFallbackNarratorMixedEvidence:
         fallback = FallbackNarrator()
         plan = fallback.generate(mixed_evidence_request)
         words = plan.narrative_summary.split()
-        assert len(words) <= 100, (
-            f"narrative_summary has {len(words)} words, must be <=100"
-        )
+        assert len(words) <= 100, f"narrative_summary has {len(words)} words, must be <=100"
 
     def test_actions_have_all_required_fields(
         self, mixed_evidence_request: ReportingRequest
@@ -75,14 +73,11 @@ class TestFallbackNarratorMixedEvidence:
         fallback = FallbackNarrator()
         plan = fallback.generate(mixed_evidence_request)
         input_ids = {f.finding_id for f in mixed_evidence_request.findings} | {
-            s.justifying_finding_ids[0]
-            for s in mixed_evidence_request.optimization_scenarios
+            s.justifying_finding_ids[0] for s in mixed_evidence_request.optimization_scenarios
         }
         for action in plan.actions:
             for fid in action.justifying_finding_ids:
-                assert fid in input_ids, (
-                    f"fallback cited finding_id {fid} not present in input"
-                )
+                assert fid in input_ids, f"fallback cited finding_id {fid} not present in input"
 
     def test_schema_valid_json(self, mixed_evidence_request: ReportingRequest) -> None:
         fallback = FallbackNarrator()
@@ -116,4 +111,8 @@ class TestFallbackNarratorMLOnly:
         plan = fallback.generate(ml_only_request)
         for action in plan.actions:
             note_lower = action.confidence_note.lower()
-            assert "lower confidence" in note_lower or "uncertainty" in note_lower or "statistical" in note_lower
+            assert (
+                "lower confidence" in note_lower
+                or "uncertainty" in note_lower
+                or "statistical" in note_lower
+            )

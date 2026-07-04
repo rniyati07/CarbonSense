@@ -8,6 +8,7 @@ Covers the three mandatory test scenarios:
 
 from __future__ import annotations
 
+from datetime import UTC
 from uuid import uuid4
 
 import pytest
@@ -258,9 +259,10 @@ class TestBundleAssemblerInvariants:
         self,
         top_features_sample: list[TopFeature],
     ) -> None:
-        from datetime import datetime, timezone
+        from datetime import datetime
+
         with pytest.raises(ValueError, match="start"):
             EvidenceWindow(
-                start=datetime(2026, 6, 2, tzinfo=timezone.utc),
-                end=datetime(2026, 6, 1, tzinfo=timezone.utc),
+                start=datetime(2026, 6, 2, tzinfo=UTC),
+                end=datetime(2026, 6, 1, tzinfo=UTC),
             )

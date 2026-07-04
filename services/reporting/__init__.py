@@ -24,7 +24,7 @@ from services.reporting.models import (
     OptimizationScenario,
     ReportingRequest,
 )
-from services.reporting.narrator import Narrator, SYSTEM_PROMPT
+from services.reporting.narrator import SYSTEM_PROMPT, Narrator
 from services.reporting.pdf_renderer import PDFRenderer
 from services.reporting.report_service import ReportService
 

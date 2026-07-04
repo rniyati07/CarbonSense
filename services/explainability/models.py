@@ -29,9 +29,7 @@ class RuleCitation(BaseModel):
 
     rule_id: str = Field(..., description="Versioned rule identifier, e.g. hvac_after_hours_v3")
     version: int = Field(..., ge=1, description="Rule version at time of firing")
-    citation: str = Field(
-        ..., description="Normative reference, e.g. ASHRAE Guideline 36 passage"
-    )
+    citation: str = Field(..., description="Normative reference, e.g. ASHRAE Guideline 36 passage")
 
 
 class ConfidenceBand(BaseModel):
@@ -44,9 +42,7 @@ class ConfidenceBand(BaseModel):
     @model_validator(mode="after")
     def lower_lte_upper(self) -> ConfidenceBand:
         if self.lower > self.upper:
-            raise ValueError(
-                f"ConfidenceBand.lower ({self.lower}) must be <= upper ({self.upper})"
-            )
+            raise ValueError(f"ConfidenceBand.lower ({self.lower}) must be <= upper ({self.upper})")
         return self
 
 
@@ -59,9 +55,7 @@ class EvidenceWindow(BaseModel):
     @model_validator(mode="after")
     def start_before_end(self) -> EvidenceWindow:
         if self.start >= self.end:
-            raise ValueError(
-                f"EvidenceWindow.start ({self.start}) must be before end ({self.end})"
-            )
+            raise ValueError(f"EvidenceWindow.start ({self.start}) must be before end ({self.end})")
         return self
 
 

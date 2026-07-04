@@ -30,7 +30,9 @@ def _sample_action_plan() -> ActionPlan:
                 estimated_savings_inr_per_year=89600.0,
                 effort_level="Low",
                 payback_months=0.0,
-                confidence_note="Moderate-high confidence (62%–81%): rule and statistical evidence agree.",
+                confidence_note=(
+                    "Moderate-high confidence (62%–81%): rule and statistical evidence agree."
+                ),
             )
         ],
         generated_by="llm",

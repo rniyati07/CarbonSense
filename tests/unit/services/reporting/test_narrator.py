@@ -10,14 +10,12 @@ Three required test scenarios (per user specification):
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
-from uuid import UUID
+from unittest.mock import MagicMock
 
 import pytest
 
 from services.reporting.models import ActionPlan, ReportingRequest
-from services.reporting.narrator import Narrator, SYSTEM_PROMPT
-from tests.unit.services.reporting.conftest import FINDING_ID_MIXED, FINDING_ID_ML_ONLY
+from services.reporting.narrator import SYSTEM_PROMPT, Narrator
 
 
 def _make_llm_client(response_text: str) -> MagicMock:

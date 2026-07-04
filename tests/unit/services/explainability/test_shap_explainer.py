@@ -103,8 +103,8 @@ class TestSHAPExplainerTree:
             SHAPExplainer(feature_names=FEATURE_NAMES)
 
     def test_kernel_missing_background_raises(self) -> None:
-        def dummy_predict(X: np.ndarray) -> np.ndarray:
-            return X.sum(axis=1)
+        def dummy_predict(x: np.ndarray) -> np.ndarray:
+            return x.sum(axis=1)
 
         with pytest.raises(ValueError, match="kernel_background"):
             SHAPExplainer(

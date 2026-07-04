@@ -8,7 +8,7 @@ templates over the same object, not two independently maintained artifacts.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from string import Template
 
 from services.reporting.models import ActionItem, ActionPlan
@@ -40,7 +40,8 @@ def _action_html(item: ActionItem) -> str:
     <div class="action">
       <div class="action-header">
         <h3>{_escape_html(item.title)}</h3>
-        <span class="badge" style="background:{colour}">{_escape_html(item.effort_level)} effort</span>
+        <span class="badge"
+              style="background:{colour}">{_escape_html(item.effort_level)} effort</span>
       </div>
       <p class="action-desc">{_escape_html(item.description)}</p>
       <table class="metrics">
@@ -139,7 +140,7 @@ class PDFRenderer:
 
         html_str = _HTML_TEMPLATE.substitute(
             building_name=_escape_html(building_name),
-            generated_at=datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M"),
+            generated_at=datetime.now(tz=UTC).strftime("%Y-%m-%d %H:%M"),
             narrative_summary=_escape_html(action_plan.narrative_summary),
             actions_html=actions_html,
             generated_by=action_plan.generated_by,

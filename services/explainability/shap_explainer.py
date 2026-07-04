@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 class PredictCallable(Protocol):
     """Protocol for a model predict function (for KernelExplainer on Autoencoders)."""
 
-    def __call__(self, X: np.ndarray) -> np.ndarray: ...
+    def __call__(self, x: np.ndarray) -> np.ndarray: ...
 
 
 class SHAPExplainer:
@@ -68,9 +68,7 @@ class SHAPExplainer:
             top_n:               Number of top features to return (ranked by |shap_value|).
         """
         if tree_model is None and kernel_predict_fn is None:
-            raise ValueError(
-                "Either tree_model or kernel_predict_fn must be provided."
-            )
+            raise ValueError("Either tree_model or kernel_predict_fn must be provided.")
         self._feature_names = feature_names
         self._top_n = top_n
 
@@ -80,11 +78,10 @@ class SHAPExplainer:
             self._mode = "tree"
         else:
             if kernel_background is None:
-                raise ValueError(
-                    "kernel_background must be provided when using kernel_predict_fn"
-                )
+                raise ValueError("kernel_background must be provided when using kernel_predict_fn")
             explainer = shap.KernelExplainer(
-                kernel_predict_fn, kernel_background  # type: ignore[arg-type]
+                kernel_predict_fn,
+                kernel_background,  # type: ignore[arg-type]
             )
             self._mode = "kernel"
         self._explainer = explainer
@@ -103,7 +100,7 @@ class SHAPExplainer:
         shap_values = self._compute_shap_values(x)
 
         # Build ranked list
-        pairs: list[tuple[str, float]] = list(zip(self._feature_names, shap_values))
+        pairs: list[tuple[str, float]] = list(zip(self._feature_names, shap_values, strict=False))
         pairs.sort(key=lambda t: abs(t[1]), reverse=True)
         top = pairs[: self._top_n]
 
@@ -115,7 +112,6 @@ class SHAPExplainer:
             )
             for name, sv in top
         ]
-
 
     def _to_array(self, feature_row: dict[str, float] | np.ndarray) -> np.ndarray:
         """Convert dict or array to a 2-D numpy array for the SHAP explainer."""
