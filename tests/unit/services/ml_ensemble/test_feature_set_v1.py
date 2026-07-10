@@ -12,7 +12,6 @@ Covers:
 from __future__ import annotations
 
 import datetime
-from uuid import UUID, uuid4
 
 import pytest
 

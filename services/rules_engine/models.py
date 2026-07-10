@@ -1,18 +1,21 @@
 from __future__ import annotations
 
 import datetime
-from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+# ExplainabilityBundle (and its RuleCitation sub-model) are the canonical,
+# spec-exact contract (TRD v2.0 §3.7) owned by services.explainability.models.
+# This module previously defined its own loose, incompatible duplicate of
+# both classes — that duplication was a real interface-compatibility bug
+# (two classes named ExplainabilityBundle with different, incompatible
+# shapes) caught during the pre-ENG-4 integration audit and removed here.
+# Every module that persists or reads findings.explainability_bundle must
+# use this shared import, never a locally-defined copy.
+from services.explainability.models import ExplainabilityBundle, RuleCitation
 
-class RuleCitation(BaseModel):
-    rule_id: str
-    version: int
-    citation: str
-    severity: str
-    matched_condition: str
+__all__ = ["ExplainabilityBundle", "Finding", "Rule", "RuleCitation"]
 
 
 class Rule(BaseModel):
@@ -26,17 +29,8 @@ class Rule(BaseModel):
     condition: str
 
 
-class ExplainabilityBundle(BaseModel):
-    finding_id: UUID | None = None
-    contributing_layers: list[str] = Field(default_factory=list)
-    top_features: list[dict[str, Any]] = Field(default_factory=list)
-    rule_citations: list[RuleCitation] = Field(default_factory=list)
-    confidence_band: dict[str, float | str] | None = None
-    evidence_window: dict[str, datetime.datetime | str] | None = None
-
-
 class Finding(BaseModel):
-    finding_id: UUID | None = None
+    finding_id: UUID
     tenant_id: UUID
     building_id: UUID
     circuit_id: UUID | None = None

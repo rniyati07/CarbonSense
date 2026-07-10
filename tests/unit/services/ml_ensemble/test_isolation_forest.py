@@ -19,11 +19,8 @@ from models.training.isolation_forest import IsolationForestTrainer
 from services.ml_ensemble.config import MLEnsembleConfig
 from services.ml_ensemble.feature_assembly import assemble_feature_vector_matrix, collect_rule_ids
 from tests.fixtures.ml_ensemble.golden_fixture import (
-    BUILDING_ID,
-    TENANT_ID,
     make_global_outlier_features,
     make_normal_features,
-    make_training_corpus,
 )
 from tests.unit.services.ml_ensemble.conftest import BUILDING, TENANT
 
@@ -114,8 +111,8 @@ class TestIsolationForestTrainer:
         Trains in-memory (without MLflow) to isolate detection from artifact loading.
         MLflow artifact round-trip is covered by the integration test.
         """
-        import numpy as np
         from sklearn.ensemble import IsolationForest
+
         from services.ml_ensemble.scaler import BuildingScaler
 
         rule_ids = collect_rule_ids(training_corpus)

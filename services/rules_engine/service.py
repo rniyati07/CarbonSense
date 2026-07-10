@@ -1,5 +1,5 @@
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from .evaluator import evaluate_condition
 from .handoff import RootCauseHandoff
@@ -90,16 +90,21 @@ class DomainRuleEngineService:
                     continue
 
                 if evaluate_condition(rule.condition, context):
-                    # Rule fired! Create a Finding
+                    # Rule fired! Create a Finding. The finding_id is generated
+                    # here, in application code, rather than left to the
+                    # database's gen_random_uuid() default — the canonical
+                    # ExplainabilityBundle (TRD v2.0 §3.7) requires finding_id
+                    # at construction time, so both the Finding and its bundle
+                    # must agree on the same id before either is persisted.
+                    finding_id = uuid4()
                     bundle = ExplainabilityBundle(
+                        finding_id=finding_id,
                         contributing_layers=["domain_rule"],
                         rule_citations=[
                             RuleCitation(
                                 rule_id=rule.rule_id,
                                 version=rule.version,
                                 citation=rule.citation,
-                                severity=rule.severity,
-                                matched_condition=rule.condition,
                             )
                         ],
                         evidence_window={
@@ -109,6 +114,7 @@ class DomainRuleEngineService:
                     )
 
                     finding = Finding(
+                        finding_id=finding_id,
                         tenant_id=tenant_id,
                         building_id=building_id,
                         circuit_id=circuit_id,

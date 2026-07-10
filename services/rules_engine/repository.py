@@ -25,14 +25,15 @@ class DatabaseFindingRepository:
                 conn.execute(
                     """
                     INSERT INTO findings (
-                        tenant_id, building_id, circuit_id, layer_origin,
+                        finding_id, tenant_id, building_id, circuit_id, layer_origin,
                         evidence_window, confidence, status, explainability_bundle
                     ) VALUES (
-                        %s, %s, %s, %s,
+                        %s, %s, %s, %s, %s,
                         tstzrange(%s, %s, '[]'), %s, %s, %s
                     )
                     """,
                     (
+                        str(f.finding_id),
                         str(f.tenant_id),
                         str(f.building_id),
                         str(f.circuit_id) if f.circuit_id else None,

@@ -26,7 +26,6 @@ from services.ml_ensemble.scaler import BuildingScaler
 from tests.fixtures.ml_ensemble.golden_fixture import (
     make_normal_features,
     make_shape_anomaly_features,
-    make_training_corpus,
 )
 from tests.unit.services.ml_ensemble.conftest import BUILDING, TENANT
 
@@ -146,7 +145,9 @@ class TestAutoencoderTrainer:
         from models.training.autoencoder import WindowAutoencoder
 
         rule_ids = collect_rule_ids(training_corpus)
-        raw_matrix = np.array(assemble_feature_vector_matrix(training_corpus, rule_ids), dtype=float)
+        raw_matrix = np.array(
+            assemble_feature_vector_matrix(training_corpus, rule_ids), dtype=float
+        )
         scaler = BuildingScaler(tenant_id=TENANT, building_id=BUILDING, rule_ids=rule_ids)
         scaled = scaler.fit_transform(raw_matrix)
         windows = _build_windows(scaled, fast_ae_config.window_length_hours)
@@ -172,7 +173,9 @@ class TestAutoencoderTrainer:
         from models.training.autoencoder import WindowAutoencoder
 
         rule_ids = collect_rule_ids(training_corpus)
-        raw_matrix = np.array(assemble_feature_vector_matrix(training_corpus, rule_ids), dtype=float)
+        raw_matrix = np.array(
+            assemble_feature_vector_matrix(training_corpus, rule_ids), dtype=float
+        )
         scaler = BuildingScaler(tenant_id=TENANT, building_id=BUILDING, rule_ids=rule_ids)
         scaled_train = scaler.fit_transform(raw_matrix)
         windows_train = _build_windows(scaled_train, fast_ae_config.window_length_hours)
@@ -190,7 +193,9 @@ class TestAutoencoderTrainer:
 
         # Score shape anomaly windows
         shape_anomalies = make_shape_anomaly_features(n_days=3)
-        shape_matrix = np.array(assemble_feature_vector_matrix(shape_anomalies, rule_ids), dtype=float)
+        shape_matrix = np.array(
+            assemble_feature_vector_matrix(shape_anomalies, rule_ids), dtype=float
+        )
         scaled_shape = scaler.transform(shape_matrix)
         windows_shape = _build_windows(scaled_shape, fast_ae_config.window_length_hours)
 

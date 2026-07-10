@@ -19,23 +19,17 @@ directly so the tests are self-contained and fast.
 
 from __future__ import annotations
 
-from uuid import UUID
-
 import numpy as np
 import pytest
 
 pytest.importorskip("torch", reason="PyTorch not installed; skip ensemble serving tests")
 
-from models.feature_store.feature_set_v1 import FeatureSetV1
 from models.serving.ensemble_serving import EnsembleServingService
 from models.training.autoencoder import AutoencoderTrainer, _build_windows
-from models.training.isolation_forest import IsolationForestTrainer
 from services.ml_ensemble.config import MLEnsembleConfig
 from services.ml_ensemble.feature_assembly import assemble_feature_vector_matrix, collect_rule_ids
 from services.ml_ensemble.scaler import BuildingScaler
 from tests.fixtures.ml_ensemble.golden_fixture import (
-    BUILDING_ID,
-    TENANT_ID,
     make_global_outlier_features,
     make_normal_features,
     make_shape_anomaly_features,
@@ -250,7 +244,6 @@ class TestBlindSpotComplementarity:
         trained_registry: InMemoryModelRegistry,
         fast_cfg: MLEnsembleConfig,
     ) -> None:
-        from models.training.autoencoder import WindowAutoencoder
 
         ae, ae_scaler, rule_ids = trained_registry.load_autoencoder(TENANT, BUILDING)
         win_len = fast_cfg.window_length_hours

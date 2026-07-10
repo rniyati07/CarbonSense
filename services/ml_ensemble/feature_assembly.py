@@ -25,11 +25,14 @@ Architecture constraints
 from __future__ import annotations
 
 import datetime
-from uuid import UUID
 
 import pandas as pd
 
-from models.feature_store.feature_set_v1 import FEATURE_SCHEMA_VERSION, FeatureSetV1, FeatureSetV1STLFields
+from models.feature_store.feature_set_v1 import (
+    FEATURE_SCHEMA_VERSION,
+    FeatureSetV1,
+    FeatureSetV1STLFields,
+)
 from services.ingestion.models import NormalizedReading
 
 
@@ -245,7 +248,7 @@ class FeatureAssembler:
 def assemble_feature_vector_matrix(
     features: list[FeatureSetV1],
     rule_ids: list[str],
-) -> "list[list[float]]":
+) -> list[list[float]]:
     """Convert a list of FeatureSetV1 rows into a 2D list of numeric vectors.
 
     Parameters

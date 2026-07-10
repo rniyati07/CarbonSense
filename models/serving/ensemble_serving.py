@@ -27,7 +27,6 @@ from models.feature_store.feature_set_v1 import FeatureSetV1
 from models.training.autoencoder import _build_windows
 from services.ml_ensemble.feature_assembly import (
     assemble_feature_vector_matrix,
-    collect_rule_ids,
 )
 from services.ml_ensemble.interfaces import ModelRegistryProtocol
 from services.ml_ensemble.models import (
@@ -160,7 +159,9 @@ class EnsembleServingService:
         for batch_start in range(0, len(usable_indices), max_batch_size):
             batch_idxs = usable_indices[batch_start : batch_start + max_batch_size]
             batch_feats = [sorted_features[i] for i in batch_idxs]
-            raw_matrix = np.array(assemble_feature_vector_matrix(batch_feats, rule_ids), dtype=float)
+            raw_matrix = np.array(
+                assemble_feature_vector_matrix(batch_feats, rule_ids), dtype=float
+            )
             scaled = _scaler.transform(raw_matrix)
             scores = model.decision_function(scaled)
             for local_i, global_i in enumerate(batch_idxs):

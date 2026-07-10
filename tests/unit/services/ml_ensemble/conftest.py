@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -20,7 +19,6 @@ from tests.fixtures.ml_ensemble.golden_fixture import (
     make_shape_anomaly_features,
     make_training_corpus,
 )
-
 
 # ------------------------------------------------------------------ #
 # Canonical IDs (re-exported for test use)
