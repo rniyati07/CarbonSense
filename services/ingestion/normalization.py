@@ -130,7 +130,7 @@ def _resample_circuit(
             gap_starts.append(gap_start)
             gap_ends.append(hourly_index[-1] + pd.Timedelta(hours=1))
 
-        for gs, ge in zip(gap_starts, gap_ends, strict=True):
+        for gs, ge in zip(gap_starts, gap_ends, strict=False):
             gap_minutes = int((ge - gs).total_seconds() / 60)
             if gap_minutes <= gap_config.max_interpolation_gap_minutes:
                 resampled.loc[gs:ge] = resampled.loc[gs:ge].interpolate(method="linear")
@@ -197,8 +197,8 @@ def _rolling_zscore_guard(
                     ts_start=ts_dt,
                     ts_end=ts_dt + datetime.timedelta(hours=1),
                     description=(
-                        f"Rolling Z-score {float(zscore[ts]):.2f} exceeds "
-                        f"threshold {zscore_threshold}"
+                        f"Rolling Z-score {float(zscore[ts]):.2f} "
+                        f"exceeds threshold {zscore_threshold}"
                     ),
                 )
             )
