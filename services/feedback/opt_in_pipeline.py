@@ -4,7 +4,8 @@ import json
 import logging
 import statistics
 import uuid
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -32,11 +33,11 @@ class OptInPipeline:
         try:
             is_sqlalchemy = hasattr(conn, "execute") and not hasattr(conn, "cursor")
 
-            # 1. Fetch all tenants global-level details
-            # Note: tenants table might require an RLS bypass or might be readable globally.
-            # Let's see: tenants table has NO RLS policy enabled on itself (only buildings etc. enable RLS).
-            # OP migration shows: "ALTER TABLE buildings ENABLE ROW LEVEL SECURITY" but does not set RLS on tenants.
-            # So we can query tenants directly.
+            # 1. Fetch all tenants global-level details. The canonical schema
+            # (database/migrations/versions/0001_canonical_schema.py) enables
+            # RLS on buildings, submeter_circuits, normalized_readings,
+            # findings, feedback_labels, audit_log, and building_calendar --
+            # but not on tenants itself, so it is safe to query directly here.
             if is_sqlalchemy:
                 from sqlalchemy import text
 
@@ -57,8 +58,9 @@ class OptInPipeline:
             tenant_id = tenant_row[0]
             opt_in = bool(tenant_row[1])
 
-            # Write the check log to the audit_log table.
-            # Since audit_log has RLS enabled, we must set app.current_tenant_id to this tenant during write.
+            # Write the check log to the audit_log table. Since audit_log has
+            # RLS enabled, app.current_tenant_id must be set to this tenant
+            # before the write.
             conn = self.get_connection()
             try:
                 if is_sqlalchemy:
@@ -98,11 +100,19 @@ class OptInPipeline:
                             }),
                         ),
                     )
-                    if hasattr(conn, "commit"):
-                        conn.commit()
+                # CONFIRMED BUG (pre-ENG-4 integration audit): this commit was
+                # previously nested inside the `else` branch above, so a
+                # SQLAlchemy Connection never committed the audit_log write --
+                # the consent-check record that TRD v2.0 3.8 requires to exist
+                # *before* any cross-tenant aggregation would silently roll
+                # back on conn.close(). Both connection types must commit.
+                if hasattr(conn, "commit"):
+                    conn.commit()
             except Exception as audit_err:
-                logger.warning("Failed to write to audit_log for tenant %s: %s", tenant_id, audit_err)
-                if not is_sqlalchemy and hasattr(conn, "rollback"):
+                logger.warning(
+                    "Failed to write to audit_log for tenant %s: %s", tenant_id, audit_err
+                )
+                if hasattr(conn, "rollback"):
                     conn.rollback()
             finally:
                 conn.close()
@@ -123,7 +133,8 @@ class OptInPipeline:
                     res = conn.execute(
                         text(
                             "SELECT "
-                            "SUM(CASE WHEN nr.is_peak_hour = FALSE THEN nr.kwh ELSE 0 END) / NULLIF(SUM(nr.kwh), 0) "
+                            "SUM(CASE WHEN nr.is_peak_hour = FALSE THEN nr.kwh ELSE 0 END) "
+                            "/ NULLIF(SUM(nr.kwh), 0) "
                             "FROM normalized_readings nr "
                             "JOIN submeter_circuits sc ON nr.circuit_id = sc.circuit_id "
                             "JOIN buildings b ON sc.building_id = b.building_id "
@@ -139,7 +150,8 @@ class OptInPipeline:
                     )
                     cursor.execute(
                         "SELECT "
-                        "SUM(CASE WHEN nr.is_peak_hour = FALSE THEN nr.kwh ELSE 0 END) / NULLIF(SUM(nr.kwh), 0) "
+                        "SUM(CASE WHEN nr.is_peak_hour = FALSE THEN nr.kwh ELSE 0 END) "
+                        "/ NULLIF(SUM(nr.kwh), 0) "
                         "FROM normalized_readings nr "
                         "JOIN submeter_circuits sc ON nr.circuit_id = sc.circuit_id "
                         "JOIN buildings b ON sc.building_id = b.building_id "

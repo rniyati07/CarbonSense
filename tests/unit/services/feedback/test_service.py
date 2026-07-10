@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+
 import pytest
 
 from services.feedback.service import RETRAINING_THRESHOLD, FeedbackService
@@ -188,7 +189,7 @@ class TestFeedbackService:
         assert event.retraining_threshold == RETRAINING_THRESHOLD
         assert event.event_type == "model.retraining.eligible"
 
-        # Scenario C: Count is RETRAINING_THRESHOLD + 1 (e.g. 6) -> should NOT fire (only exactly at crossing)
+        # Scenario C: Count is THRESHOLD + 1 (e.g. 6) -> should NOT fire (only exactly at crossing)
         mock_connection.cursor_obj.query_responses = {
             "FROM findings": [[(building_id, bundle_str)]],
             "COUNT(*)": [[(RETRAINING_THRESHOLD + 1,)]],
@@ -201,3 +202,47 @@ class TestFeedbackService:
         )
         # Count should remain 1 (no new event published)
         assert len(mock_event_publisher.published_events) == 1
+
+    def test_record_feedback_commits_on_sqlalchemy_connection(
+        self,
+        tenant_id: uuid.UUID,
+        finding_id: uuid.UUID,
+        mock_sqlalchemy_connection: any,
+        mock_event_publisher: any,
+    ) -> None:
+        """Regression test for the pre-ENG-4 integration audit finding: the
+        commit was previously gated on `not is_sqlalchemy`, so a real
+        SQLAlchemy Connection never committed the feedback_labels insert,
+        the findings status update, or the retraining-eligible count --
+        every write silently rolled back on conn.close(). The prior test
+        suite never caught this because MockConnection has both .execute()
+        and .cursor(), so is_sqlalchemy was always False; this test uses a
+        connection shaped like a real SQLAlchemy Connection (.execute()
+        only) so the SQLAlchemy branch actually runs.
+        """
+        building_id = uuid.uuid4()
+        bundle_str = json.dumps({"finding_id": str(finding_id), "top_features": []})
+        mock_sqlalchemy_connection.query_responses = {
+            "FROM findings": [[(building_id, bundle_str)]],
+            "COUNT(*)": [[(1,)]],
+        }
+
+        def get_conn():
+            return mock_sqlalchemy_connection
+
+        service = FeedbackService(
+            get_connection=get_conn,
+            event_publisher=mock_event_publisher,
+        )
+        service.record_feedback(
+            tenant_id=tenant_id,
+            finding_id=finding_id,
+            action="confirmed",
+            actor="test_user",
+        )
+
+        assert mock_sqlalchemy_connection.committed is True
+        assert mock_sqlalchemy_connection.rolled_back is False
+        queries = [q[0] for q in mock_sqlalchemy_connection.executed_queries]
+        assert any("INSERT INTO feedback_labels" in q for q in queries)
+        assert any("UPDATE findings SET status" in q for q in queries)

@@ -4,13 +4,17 @@ import datetime
 import json
 import logging
 import uuid
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from orchestration.events.kafka.schemas.retraining_eligible import RetrainingEligibleEvent
 
 logger = logging.getLogger(__name__)
 
-# UNRATIFIED CONFIG CONSTANT: Crossing this number of feedback labels for a building triggers retraining.
+# UNRATIFIED CONFIG CONSTANT: crossing this number of feedback labels for a
+# building triggers retraining. Needs Product/Data Science sign-off before
+# GA (Data & Model Strategy 8.1 flags the feedback-volume threshold as an
+# open parameter, not yet numerically specified anywhere).
 RETRAINING_THRESHOLD = 5
 
 
@@ -41,8 +45,9 @@ class FeedbackService:
     ) -> None:
         """Records confirm/dismiss feedback for a finding.
 
-        Ensures the finding is valid, has an explainability bundle, inserts the feedback label,
-        updates the finding status, and publishes a retraining-eligible event if the threshold is reached.
+        Ensures the finding is valid, has an explainability bundle, inserts
+        the feedback label, updates the finding status, and publishes a
+        retraining-eligible event if the threshold is reached.
         """
         if action not in ("confirmed", "dismissed"):
             raise ValueError(f"Invalid feedback action: {action}")
@@ -92,7 +97,8 @@ class FeedbackService:
             building_id = row[0]
             explainability_bundle_raw = row[1]
 
-            # In psycopg2/SQLAlchemy, JSONB might be returned as dict or parsed json object. Let's make sure:
+            # In psycopg2/SQLAlchemy, JSONB may come back as a dict already
+            # or as a raw JSON string -- normalize either way:
             if isinstance(explainability_bundle_raw, str):
                 try:
                     explainability_bundle = json.loads(explainability_bundle_raw)
@@ -109,12 +115,13 @@ class FeedbackService:
 
             if not is_valid_bundle:
                 raise ValueError(
-                    f"Cannot write feedback for finding {finding_id} because it has no explainability bundle."
+                    f"Cannot write feedback for finding {finding_id} because it "
+                    "has no explainability bundle."
                 )
 
             # Insert into feedback_labels & update finding status
             feedback_id = uuid.uuid4()
-            now = datetime.datetime.now(datetime.timezone.utc)
+            now = datetime.datetime.now(datetime.UTC)
 
             if is_sqlalchemy:
                 conn.execute(
@@ -188,12 +195,19 @@ class FeedbackService:
                     feedback_count=feedback_count,
                 )
 
-            # Commit transaction if we are using manual transaction control
-            if not is_sqlalchemy and hasattr(conn, "commit"):
+            # CONFIRMED BUG (pre-ENG-4 integration audit): this commit was
+            # previously gated on `not is_sqlalchemy`, so a SQLAlchemy
+            # Connection never committed -- the feedback_labels insert, the
+            # findings status update, and the retraining-eligible count were
+            # all silently rolled back on conn.close(). Both connection
+            # types need an explicit commit; SQLAlchemy Connection objects
+            # (outside a `begin()` context) support .commit() same as a raw
+            # DB-API connection.
+            if hasattr(conn, "commit"):
                 conn.commit()
 
         except Exception as e:
-            if not is_sqlalchemy and hasattr(conn, "rollback"):
+            if hasattr(conn, "rollback"):
                 conn.rollback()
             raise e
         finally:
@@ -217,18 +231,24 @@ class FeedbackService:
             tenant_id=tenant_id,
             building_id=building_id,
             correlation_id=uuid.uuid4(),
-            timestamp=datetime.datetime.now(datetime.timezone.utc),
+            timestamp=datetime.datetime.now(datetime.UTC),
             event_type="model.retraining.eligible",
             feedback_count=feedback_count,
             retraining_threshold=RETRAINING_THRESHOLD,
         )
 
+        # shared.config.kafka.KafkaSettings.topic_retraining_eligible is the
+        # canonical topic name (added during pre-ENG-4 integration -- this
+        # branch previously probed for an attribute that did not exist
+        # anywhere in shared config, so the fallback literal below was
+        # always what actually got used).
         topic = "model.retraining.eligible"
         if self.kafka_settings and hasattr(self.kafka_settings, "topic_retraining_eligible"):
             topic = self.kafka_settings.topic_retraining_eligible
-        elif self.kafka_settings and hasattr(self.kafka_settings, "topic_data_arrived"):
-            # Default or fallback in configuration
-            pass
 
         self.event_publisher.publish(topic, event)
-        logger.info("Published RetrainingEligibleEvent for building %s - count %s", building_id, feedback_count)
+        logger.info(
+            "Published RetrainingEligibleEvent for building %s - count %s",
+            building_id,
+            feedback_count,
+        )

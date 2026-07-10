@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import json
 import uuid
+
 import pytest
 
 from services.feedback.opt_in_pipeline import OptInPipeline
@@ -36,7 +36,7 @@ class TestOptInPipeline:
 
         # Verify audit logs were written for BOTH tenants
         queries = mock_connection.executed_queries
-        
+
         has_audit_a = False
         has_audit_b = False
         for q in queries:
@@ -94,7 +94,7 @@ class TestOptInPipeline:
             sql, params = q
             if "normalized_readings" in sql and str(tenant_c) in str(params):
                 tenant_c_query_runs = True
-        
+
         assert tenant_c_query_runs is False
 
     def test_calculate_aggregate_priors_no_data(
