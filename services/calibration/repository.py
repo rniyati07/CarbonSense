@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Sequence
+import json
+from collections.abc import Sequence
 from uuid import UUID
 
 from sqlalchemy import text
@@ -43,7 +44,7 @@ class CalibrationRepository:
         the minimum temporary contract exactly as documented.
         """
         # We query the unified `findings` table where confidence is null (uncalibrated)
-        # Note: Depending on the upstream branch implementation, this may join with 
+        # Note: Depending on the upstream branch implementation, this may join with
         # `feature_set_v1` or equivalent tables. We provide the minimal contract.
         stmt = text(
             """
@@ -57,7 +58,7 @@ class CalibrationRepository:
         result = await self._session.execute(
             stmt, {"tenant_id": str(tenant_id), "building_id": str(building_id)}
         )
-        
+
         findings = []
         for row in result.fetchall():
             bundle = row[4] or {}
@@ -99,7 +100,7 @@ class CalibrationRepository:
                 "max_samples": max_samples,
             },
         )
-        
+
         labels = []
         for row in result.fetchall():
             bundle = row[2] or {}
@@ -116,6 +117,41 @@ class CalibrationRepository:
     ) -> None:
         """
         Persist the calibrated confidence intervals and labels back to the database.
+
+        INTERFACE FIX (pre-ENG-4 integration audit): this previously wrote a
+        `calibration: {lower_bound, upper_bound, label}` key, which does not
+        match the canonical ExplainabilityBundle contract (TRD v2.0 3.7,
+        services/explainability/models.py ConfidenceBand) of
+        `confidence_band: {lower, upper, method}`. Fixed to write the
+        canonical key/shape so a later SHAP/bundle-assembly pass (ENG-3g)
+        finds calibration output where it actually looks for it.
+
+        ARCHITECTURAL GAP, not fixed here (needs a Product/Architecture
+        decision, not a unilateral patch): per TRD v2.0 3.6-3.7, calibration
+        runs *before* Root-Cause Attribution assembles the Explainability
+        Bundle, and `findings.explainability_bundle` is NOT NULL in the
+        canonical schema -- so a row this repository can update by
+        `jsonb_set`-patching an existing bundle. But the ExplainabilityBundle
+        contract now requires top_features/confidence_band together for any
+        ml_ensemble/stl_residual finding (see explainability/models.py's
+        enforce_probabilistic_fields_for_ml_or_stl validator, added during
+        this same integration pass) -- meaning an ML/STL-sourced finding
+        cannot legally exist in `findings` yet at the point calibration runs,
+        unless it was already bundled with a placeholder confidence_band.
+        This repository's raw-SQL jsonb_set patch works structurally (it
+        does not fail), but resolving *how* an ML/STL finding gets its first,
+        pre-calibration bundle is out of scope for an integration pass and
+        needs an explicit design decision before ENG-4.
+
+        Also note: `CalibratedFinding.confidence_label` (the human-readable
+        "Low confidence -- still establishing baseline" / "Calibrated (90%
+        confidence)" string) is no longer persisted here -- the canonical
+        ConfidenceBand contract has no slot for free-text labels, only
+        lower/upper/method. Flagged, not silently dropped: whether that label
+        text should be derived downstream (e.g. by the Reporting Service's
+        prompt from lower/upper/method directly) or added as a real field on
+        the canonical contract is a product decision, not one this
+        integration pass makes unilaterally.
         """
         if not findings:
             return
@@ -126,20 +162,19 @@ class CalibrationRepository:
             SET confidence = :confidence,
                 explainability_bundle = jsonb_set(
                     explainability_bundle,
-                    '{calibration}',
-                    :calibration_json::jsonb
+                    '{confidence_band}',
+                    :confidence_band_json::jsonb
                 )
             WHERE finding_id = :finding_id
               AND tenant_id = :tenant_id
             """
         )
         for finding in findings:
-            import json
-            calib_json = json.dumps(
+            confidence_band_json = json.dumps(
                 {
-                    "lower_bound": finding.confidence_interval_lower,
-                    "upper_bound": finding.confidence_interval_upper,
-                    "label": finding.confidence_label,
+                    "lower": finding.confidence_interval_lower,
+                    "upper": finding.confidence_interval_upper,
+                    "method": "conformal_prediction",
                 }
             )
             # We map confidence_interval_upper as the primary point-estimate for 'confidence'
@@ -148,7 +183,7 @@ class CalibrationRepository:
                 stmt,
                 {
                     "confidence": finding.confidence_interval_upper,
-                    "calibration_json": calib_json,
+                    "confidence_band_json": confidence_band_json,
                     "finding_id": str(finding.finding_id),
                     "tenant_id": str(tenant_id),
                 },

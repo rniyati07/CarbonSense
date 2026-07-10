@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import logging
-from typing import Sequence
 from uuid import UUID
 
 from opentelemetry import metrics
 
-from services.calibration.dto import CalibratedFinding, UncalibratedFinding
+from services.calibration.dto import CalibratedFinding
 from services.calibration.mapie_wrapper import ConformalPredictor
 from services.calibration.repository import CalibrationRepository
 from shared.config.calibration import CalibrationSettings
@@ -113,12 +112,13 @@ class CalibrationService:
                     },
                 )
 
+                target_pct = self.settings.target_confidence_level * 100
                 calibrated_findings.append(
                     CalibratedFinding(
                         finding_id=finding.finding_id,
                         confidence_interval_lower=lower,
                         confidence_interval_upper=upper,
-                        confidence_label=f"Calibrated ({self.settings.target_confidence_level * 100:.0f}% confidence)",
+                        confidence_label=f"Calibrated ({target_pct:.0f}% confidence)",
                     )
                 )
 

@@ -57,22 +57,21 @@ async def ml_ensemble_activity(input: AnalysisPipelineInput) -> ActivityResult:
 
 @activity.defn
 async def confidence_calibration_activity(input: AnalysisPipelineInput) -> ActivityResult:
-    from shared.auth.tenant_context import tenant_scope
-    from shared.database import get_session_factory
     from services.calibration.repository import CalibrationRepository
     from services.calibration.service import CalibrationService
+    from shared.auth.tenant_context import tenant_scope
+    from shared.database import get_session_factory
 
     factory = get_session_factory()
-    async with factory() as session:
-        async with tenant_scope(session, input.tenant_id):
-            repo = CalibrationRepository(session)
-            service = CalibrationService(repo)
-            await service.calibrate_findings(
-                tenant_id=input.tenant_id,
-                building_id=input.building_id,
-                correlation_id=input.correlation_id,
-            )
-            await session.commit()
+    async with factory() as session, tenant_scope(session, input.tenant_id):
+        repo = CalibrationRepository(session)
+        service = CalibrationService(repo)
+        await service.calibrate_findings(
+            tenant_id=input.tenant_id,
+            building_id=input.building_id,
+            correlation_id=input.correlation_id,
+        )
+        await session.commit()
 
     return ActivityResult(
         step_name="confidence_calibration",

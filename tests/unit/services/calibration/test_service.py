@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Sequence
+from collections.abc import Sequence
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -63,7 +63,8 @@ async def test_calibration_service_scenario_a(
     await service.calibrate_findings(tenant_id, building_id, "corr-1")
 
     mock_repository.save_calibrated_findings.assert_called_once()
-    saved_findings: Sequence[CalibratedFinding] = mock_repository.save_calibrated_findings.call_args[0][1]
+    call_args = mock_repository.save_calibrated_findings.call_args
+    saved_findings: Sequence[CalibratedFinding] = call_args[0][1]
     assert len(saved_findings) == 1
     assert saved_findings[0].confidence_interval_lower == 0.0
     assert saved_findings[0].confidence_interval_upper == 1.0
@@ -93,7 +94,8 @@ async def test_calibration_service_scenario_b(
     await service.calibrate_findings(tenant_id, building_id, "corr-1")
 
     mock_repository.save_calibrated_findings.assert_called_once()
-    saved_findings: Sequence[CalibratedFinding] = mock_repository.save_calibrated_findings.call_args[0][1]
+    call_args = mock_repository.save_calibrated_findings.call_args
+    saved_findings: Sequence[CalibratedFinding] = call_args[0][1]
     assert len(saved_findings) == 1
     assert saved_findings[0].confidence_interval_lower == 0.0
     assert saved_findings[0].confidence_interval_upper == 1.0
@@ -137,7 +139,8 @@ async def test_calibration_service_scenario_c(
     mock_predictor_instance.predict.assert_called_once_with([0.8])
 
     mock_repository.save_calibrated_findings.assert_called_once()
-    saved_findings: Sequence[CalibratedFinding] = mock_repository.save_calibrated_findings.call_args[0][1]
+    call_args = mock_repository.save_calibrated_findings.call_args
+    saved_findings: Sequence[CalibratedFinding] = call_args[0][1]
     assert len(saved_findings) == 1
     assert saved_findings[0].confidence_interval_lower == 0.7
     assert saved_findings[0].confidence_interval_upper == 0.9
