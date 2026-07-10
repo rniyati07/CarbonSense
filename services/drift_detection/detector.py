@@ -83,10 +83,10 @@ def detect_drift(
     # mk.original_test returns a named tuple: (trend, h, p, z, Tau, s, var_s, slope, intercept)
     mk_result = mk.original_test(valid_ratios, alpha=threshold_config.p_value_threshold)
 
-    if mk_result.trend == 'increasing':
+    if mk_result.trend == "increasing":
         trend_direction = TrendDirection.INCREASING
         status = DriftStatus.DRIFTING
-    elif mk_result.trend == 'decreasing':
+    elif mk_result.trend == "decreasing":
         trend_direction = TrendDirection.DECREASING
         status = DriftStatus.DRIFTING
     else:

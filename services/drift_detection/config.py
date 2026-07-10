@@ -6,9 +6,7 @@ from pydantic import BaseModel, Field
 class DriftThresholdConfig(BaseModel):
     """Configuration for Mann-Kendall trend detection thresholds."""
 
-    p_value_threshold: float = Field(
-        default=0.05, description="Significance level for trend test"
-    )
+    p_value_threshold: float = Field(default=0.05, description="Significance level for trend test")
     min_window_days: int = Field(default=14, description="Minimum days of history required")
     min_data_points: int = Field(
         default=10, description="Minimum number of valid readings required"

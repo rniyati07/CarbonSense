@@ -184,7 +184,7 @@ def make_global_outlier_features(
                 after_hours_kwh_ratio=0.0,
                 weekend_floor_load=None,
                 rolling_efficiency_ratio=kwh / rolling_baseline,  # 210/10 = 21.0
-                stl_residual_magnitude=kwh - rolling_baseline,    # 210-10 = 200.0
+                stl_residual_magnitude=kwh - rolling_baseline,  # 210-10 = 200.0
                 day_type="business_day",
                 rule_fire_indicators={},
                 low_data_quality=False,

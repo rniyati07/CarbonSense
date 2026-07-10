@@ -78,13 +78,9 @@ class FeedbackService:
                 row = res.fetchone()
             else:
                 cursor = conn.cursor()
+                cursor.execute("SET LOCAL app.current_tenant_id = %s", (str(tenant_id),))
                 cursor.execute(
-                    "SET LOCAL app.current_tenant_id = %s", (str(tenant_id),)
-                )
-                cursor.execute(
-                    "SELECT building_id, explainability_bundle "
-                    "FROM findings "
-                    "WHERE finding_id = %s",
+                    "SELECT building_id, explainability_bundle FROM findings WHERE finding_id = %s",
                     (str(finding_id),),
                 )
                 row = cursor.fetchone()

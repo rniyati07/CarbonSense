@@ -56,9 +56,7 @@ class CalibrationService:
         labels = await self.repository.get_calibration_set(
             tenant_id, building_id, self.settings.max_history_samples
         )
-        is_cold_start = await self.repository.get_building_cold_start_flag(
-            tenant_id, building_id
-        )
+        is_cold_start = await self.repository.get_building_cold_start_flag(tenant_id, building_id)
 
         calibrated_findings: list[CalibratedFinding] = []
 

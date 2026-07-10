@@ -19,6 +19,7 @@ class DriftEventPublisher(Protocol):
         """Publishes a customer-facing notification that the building baseline may be stale."""
         ...
 
+
 class KafkaDriftEventPublisher:
     """Implementation of DriftEventPublisher using confluent-kafka."""
 
@@ -35,7 +36,7 @@ class KafkaDriftEventPublisher:
         # string, and so this matches the same fix applied to eng-3h's
         # retraining_eligible topic.
         topic = self.settings.topic_model_drift_detected
-        data = payload.model_dump(mode='json')
+        data = payload.model_dump(mode="json")
 
         try:
             self._producer.produce(

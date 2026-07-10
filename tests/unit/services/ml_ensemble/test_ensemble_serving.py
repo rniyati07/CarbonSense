@@ -91,9 +91,7 @@ def trained_registry(fast_cfg: MLEnsembleConfig) -> InMemoryModelRegistry:
     )
 
     registry = InMemoryModelRegistry()
-    registry.register_isolation_forest(
-        TENANT, BUILDING, if_model, scaler_if._scaler, rule_ids
-    )
+    registry.register_isolation_forest(TENANT, BUILDING, if_model, scaler_if._scaler, rule_ids)
     registry.register_autoencoder(TENANT, BUILDING, ae, scaler_ae._scaler, rule_ids)
     return registry
 
@@ -235,8 +233,7 @@ class TestBlindSpotComplementarity:
         )
         # Also verify outliers are actually flagged (score < 0)
         assert float(np.mean(outlier_scores < 0)) >= 0.5, (
-            f"IF flagged fewer than 50% of global outliers: "
-            f"rate={np.mean(outlier_scores < 0):.1%}"
+            f"IF flagged fewer than 50% of global outliers: rate={np.mean(outlier_scores < 0):.1%}"
         )
 
     def test_ae_catches_shape_anomalies_not_normal(

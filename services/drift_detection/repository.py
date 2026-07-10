@@ -63,7 +63,7 @@ class DatabaseDriftRepository:
                     schema_version=row.schema_version,
                     source_system="db",
                     ingestion_timestamp=now,
-                    normalization_version="v1"
+                    normalization_version="v1",
                 )
             )
         return readings

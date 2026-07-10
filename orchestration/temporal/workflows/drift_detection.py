@@ -34,9 +34,7 @@ class DriftDetectionWorkflow:
         # building_id check but reverted to the plain ValueError that caused
         # exactly that hang. Combined: both required fields, non-retryable.
         if not input.tenant_id or not input.building_id:
-            raise ApplicationError(
-                "tenant_id and building_id are required", non_retryable=True
-            )
+            raise ApplicationError("tenant_id and building_id are required", non_retryable=True)
 
         result = await workflow.execute_activity(
             drift_detection_activity,

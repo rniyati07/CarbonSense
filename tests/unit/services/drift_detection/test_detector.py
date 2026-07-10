@@ -22,14 +22,14 @@ def base_readings():
             NormalizedReading(
                 tenant_id=tenant_id,
                 circuit_id=circuit_id,
-                ts=now - datetime.timedelta(days=15-i),
+                ts=now - datetime.timedelta(days=15 - i),
                 kwh=10.0,
                 rolling_baseline_kwh=10.0,
                 data_quality_status="pass",
                 schema_version="v1",
                 source_system="db",
                 ingestion_timestamp=now,
-                normalization_version="v1"
+                normalization_version="v1",
             )
         )
     return readings

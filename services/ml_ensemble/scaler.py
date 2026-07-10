@@ -77,8 +77,7 @@ class BuildingScaler:
         """
         if not self._is_fitted:
             raise RuntimeError(
-                "BuildingScaler.transform() called before fit().  "
-                "Call fit(training_matrix) first."
+                "BuildingScaler.transform() called before fit().  Call fit(training_matrix) first."
             )
         return self._scaler.transform(feature_matrix)  # type: ignore[no-any-return]
 

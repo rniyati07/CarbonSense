@@ -140,9 +140,7 @@ class EnsembleServingService:
         max_batch_size: int,
     ) -> dict[int, IsolationForestScore]:
         try:
-            model, _scaler, rule_ids = self._registry.load_isolation_forest(
-                tenant_id, building_id
-            )
+            model, _scaler, rule_ids = self._registry.load_isolation_forest(tenant_id, building_id)
         except Exception:
             logger.warning(
                 "IF model not available for tenant=%s building=%s — skipping IF scores",

@@ -75,29 +75,31 @@ class OptInPipeline:
                         ),
                         {
                             "tid": str(tenant_id),
-                            "payload": json.dumps({
-                                "opt_in_consent": opt_in,
-                                "checked_at": str(uuid.uuid4()),
-                                "pipeline": "cold_start_prior_aggregation",
-                            }),
+                            "payload": json.dumps(
+                                {
+                                    "opt_in_consent": opt_in,
+                                    "checked_at": str(uuid.uuid4()),
+                                    "pipeline": "cold_start_prior_aggregation",
+                                }
+                            ),
                         },
                     )
                 else:
                     cursor = conn.cursor()
-                    cursor.execute(
-                        "SET LOCAL app.current_tenant_id = %s", (str(tenant_id),)
-                    )
+                    cursor.execute("SET LOCAL app.current_tenant_id = %s", (str(tenant_id),))
                     cursor.execute(
                         "INSERT INTO audit_log (tenant_id, event_type, payload) "
                         "VALUES (%s, %s, %s)",
                         (
                             str(tenant_id),
                             "cross_tenant_consent_check",
-                            json.dumps({
-                                "opt_in_consent": opt_in,
-                                "checked_at": str(uuid.uuid4()),
-                                "pipeline": "cold_start_prior_aggregation",
-                            }),
+                            json.dumps(
+                                {
+                                    "opt_in_consent": opt_in,
+                                    "checked_at": str(uuid.uuid4()),
+                                    "pipeline": "cold_start_prior_aggregation",
+                                }
+                            ),
                         ),
                     )
                 # CONFIRMED BUG (pre-ENG-4 integration audit): this commit was
@@ -145,9 +147,7 @@ class OptInPipeline:
                     ratio = res.scalar()
                 else:
                     cursor = conn.cursor()
-                    cursor.execute(
-                        "SET LOCAL app.current_tenant_id = %s", (str(tenant_id),)
-                    )
+                    cursor.execute("SET LOCAL app.current_tenant_id = %s", (str(tenant_id),))
                     cursor.execute(
                         "SELECT "
                         "SUM(CASE WHEN nr.is_peak_hour = FALSE THEN nr.kwh ELSE 0 END) "

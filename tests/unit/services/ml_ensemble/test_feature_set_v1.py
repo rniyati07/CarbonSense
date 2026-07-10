@@ -116,8 +116,8 @@ class TestToNumericVector:
         assert vec[4] == pytest.approx(1.05)
         assert vec[5] == pytest.approx(0.5)
         assert vec[6] == float(DAY_TYPE_ENCODING["weekend"])
-        assert vec[7] == 1.0   # alpha fired
-        assert vec[8] == 0.0   # beta did not fire
+        assert vec[7] == 1.0  # alpha fired
+        assert vec[8] == 0.0  # beta did not fire
 
     def test_rule_id_ordering_is_deterministic(self) -> None:
         """Same rule_ids list always produces the same vector ordering."""
@@ -131,8 +131,8 @@ class TestToNumericVector:
         rule_ids = ["present", "absent"]
         f = _minimal_feature(rule_fire_indicators={"present": True})
         vec = f.to_numeric_vector(rule_ids)
-        assert vec[7] == 1.0   # present fired
-        assert vec[8] == 0.0   # absent: not in dict → 0
+        assert vec[7] == 1.0  # present fired
+        assert vec[8] == 0.0  # absent: not in dict → 0
 
     def test_empty_rule_ids_produces_7_element_vector(self) -> None:
         f = _minimal_feature()
