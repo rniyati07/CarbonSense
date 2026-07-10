@@ -75,11 +75,10 @@ async def drift_detection_activity(input: DriftDetectionInput) -> ActivityResult
 
     # 1. Fetch historical readings inside a tenant-scoped database session.
     factory = _get_session_factory()
-    async with factory() as session:
-        async with tenant_scope(session, tenant_uuid) as scoped_session:
-            repo = DatabaseDriftRepository(scoped_session)
-            building_type, climate_zone = await repo.get_building_context(building_uuid)
-            readings = await repo.get_trailing_readings(tenant_uuid, building_uuid, days=30)
+    async with factory() as session, tenant_scope(session, tenant_uuid) as scoped_session:
+        repo = DatabaseDriftRepository(scoped_session)
+        building_type, climate_zone = await repo.get_building_context(building_uuid)
+        readings = await repo.get_trailing_readings(tenant_uuid, building_uuid, days=30)
 
     # 2. Run drift detection business logic (pure function, no I/O).
     drift_result = detect_drift(

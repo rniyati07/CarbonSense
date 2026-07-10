@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime
-from typing import List
 from uuid import UUID
 
 from sqlalchemy import text
@@ -27,24 +26,31 @@ class DatabaseDriftRepository:
 
     async def get_trailing_readings(
         self, tenant_id: UUID, building_id: UUID, days: int = 30
-    ) -> List[NormalizedReading]:
+    ) -> list[NormalizedReading]:
         """Fetch normalized readings for the trailing window."""
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
         start_time = now - datetime.timedelta(days=days)
-        
+
+        # CONFIRMED BUG (pre-ENG-4 integration audit): this query string used
+        # `\"\"\"` (escaped quotes inside a plain, non-raw string) instead of
+        # `"""`, a SyntaxError that broke this module's entire import chain
+        # (repository.py -> drift_detection_stub.py -> the drift_detection.py
+        # workflow -> its own test file). Fixed below; no other change.
         query = text(
-            \"\"\"
-            SELECT nr.ts, nr.kwh, nr.rolling_baseline_kwh, nr.data_quality_status, nr.circuit_id, 
+            """
+            SELECT nr.ts, nr.kwh, nr.rolling_baseline_kwh, nr.data_quality_status, nr.circuit_id,
                    nr.schema_version
             FROM normalized_readings nr
             JOIN submeter_circuits sc ON nr.circuit_id = sc.circuit_id
             WHERE sc.building_id = :b_id AND nr.ts >= :start_time
-            \"\"\"
+            """
         )
-        
-        result = await self._session.execute(query, {"b_id": str(building_id), "start_time": start_time})
+
+        result = await self._session.execute(
+            query, {"b_id": str(building_id), "start_time": start_time}
+        )
         readings = []
-        
+
         for row in result:
             readings.append(
                 NormalizedReading(

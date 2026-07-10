@@ -18,7 +18,7 @@ with workflow.unsafe.imports_passed_through():
 @workflow.defn
 class DriftDetectionWorkflow:
     """Scheduled cron workflow for building-level drift detection.
-    
+
     Runs entirely outside the real-time Analysis Pipeline.
     Calculates drift over a trailing window and publishes events if drift is found.
     """
