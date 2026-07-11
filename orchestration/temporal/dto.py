@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import datetime
+from dataclasses import dataclass, field
+from uuid import UUID
+
+from services.explainability.models import ExplainabilityBundle
+from services.ml_ensemble.models import EnsembleScoreRecord
+from services.rules_engine.models import Finding
+from services.stl_detection.models import STLResidualResult
+from models.feature_store.feature_set_v1 import FeatureSetV1
 
 
 @dataclass(frozen=True)
@@ -18,6 +26,84 @@ class AnalysisPipelineInput:
     tenant_id: str
     building_id: str
     correlation_id: str
+    # ENG-2c-wiring addition: every real repository fetch in this pipeline
+    # needs an explicit analysis window, which nothing previously supplied.
+    # Defaulted so every existing caller/test constructing AnalysisPipelineInput
+    # without this field keeps working unchanged.
+    window_days: int = 30
+
+
+# --------------------------------------------------------------------------
+# ENG-2c-wiring: explicit inter-activity DTOs (Analysis Pipeline architecture
+# completion). Each stage's real output becomes the next stage's input,
+# instead of being discarded. Pydantic model fields (Finding, FeatureSetV1,
+# STLResidualResult, ExplainabilityBundle, EnsembleScoreRecord) round-trip
+# through Temporal's default data converter with correct type reconstruction
+# on the receiving side -- verified directly against this repo's installed
+# temporalio version before relying on it here, since the wrong assumption
+# would fail silently until workflow execution.
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class RuleFireEvent:
+    """One (circuit, timestamp, rule) firing -- the granular signal
+    Feature Assembly needs (TRD v2.0 3.4's `rule_fire_indicators`) that
+    DomainRuleEngineService.process_readings()'s `list[Finding]` return
+    value doesn't carry directly. Derived by the activity from the real
+    Finding list post-hoc (each rule-fired Finding's evidence window is a
+    single point in time) -- no change to rules_engine's own service code.
+    """
+
+    circuit_id: UUID
+    ts: datetime.datetime
+    rule_id: str
+
+
+@dataclass(frozen=True)
+class RuleEngineOutput:
+    findings: list[Finding]
+    rule_fires: list[RuleFireEvent]
+
+
+@dataclass(frozen=True)
+class STLOutput:
+    residuals: list[STLResidualResult]
+
+
+@dataclass(frozen=True)
+class FeatureAssemblyOutput:
+    features: list[FeatureSetV1]
+
+
+@dataclass(frozen=True)
+class MLEnsembleOutput:
+    scores: list[EnsembleScoreRecord]
+
+
+@dataclass(frozen=True)
+class CalibratedScore:
+    """One reading's calibrated confidence band, keyed for downstream
+    matching back to its EnsembleScoreRecord (circuit_id, ts)."""
+
+    circuit_id: UUID
+    ts: datetime.datetime
+    confidence_lower: float
+    confidence_upper: float
+    is_cold_start: bool
+
+
+@dataclass(frozen=True)
+class ConfidenceCalibrationOutput:
+    calibrated_scores: list[CalibratedScore] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class ExplainabilityOutput:
+    """IDs of findings persisted with a complete ExplainabilityBundle this run."""
+
+    persisted_finding_ids: list[UUID] = field(default_factory=list)
+    bundles: list[ExplainabilityBundle] = field(default_factory=list)
 
 
 @dataclass
