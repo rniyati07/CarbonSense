@@ -9,23 +9,34 @@ with workflow.unsafe.imports_passed_through():
     from orchestration.temporal.activities.drift_detection_stub import (
         drift_detection_activity,
     )
-    from orchestration.temporal.dto import ActivityResult, DriftDetectionInput
+    from orchestration.temporal.dto import (
+        ActivityResult,
+        DriftDetectionInput,
+    )
 
 
 @workflow.defn
 class DriftDetectionWorkflow:
-    """Scheduled nightly per building (TRD v2.0 section 3.5).
+    """Scheduled cron workflow for building-level drift detection.
 
-    Explicitly out of the real-time request path. Drift is a slow-moving
-    signal; computing it on every request would be wasted work.
+    Runs entirely outside the real-time Analysis Pipeline.
+    Calculates drift over a trailing window and publishes events if drift is found.
     """
 
     @workflow.run
     async def run(self, input: DriftDetectionInput) -> ActivityResult:
-        if not input.tenant_id:
-            raise ApplicationError("tenant_id is required", non_retryable=True)
-        return await workflow.execute_activity(
+        # main previously only validated tenant_id; develop's validation
+        # (from the eng-3e integration's own merge-conflict resolution)
+        # additionally requires building_id and is the superset -- taking
+        # develop's side whole here, not a re-merge of two partial fixes.
+        if not input.tenant_id or not input.building_id:
+            raise ApplicationError("tenant_id and building_id are required", non_retryable=True)
+
+        result = await workflow.execute_activity(
             drift_detection_activity,
             input,
-            start_to_close_timeout=timedelta(minutes=30),
+            start_to_close_timeout=timedelta(minutes=5),
+            retry_policy=None,  # Configure retries explicitly as needed
         )
+
+        return result

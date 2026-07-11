@@ -53,3 +53,33 @@ class RetrainingInput:
     tenant_id: str
     building_id: str
     trigger: str = "calendar"  # "calendar" | "drift" | "feedback_volume"
+
+
+@dataclass(frozen=True)
+class MLTrainingInput:
+    """Input DTO for ML Ensemble training Temporal activities (ENG-3d).
+
+    Uses str (not UUID) for Temporal serialisation compatibility.
+    The training activities convert back to UUID before calling the trainer.
+    """
+
+    tenant_id: str
+    building_id: str
+    building_type: str = "unknown"
+    trigger: str = "calendar"  # "calendar" | "drift" | "feedback_volume"
+    mlflow_tracking_uri: str = ""
+
+
+@dataclass(frozen=True)
+class MLTrainingResult:
+    """Result DTO returned by ML Ensemble training Temporal activities (ENG-3d)."""
+
+    tenant_id: str
+    building_id: str
+    model_type: str  # "isolation_forest" | "autoencoder"
+    mlflow_run_id: str
+    model_artifact_uri: str
+    scaler_artifact_uri: str
+    n_training_samples: int
+    status: str = "completed"  # "completed" | "skipped" | "failed"
+    detail: str = ""

@@ -57,11 +57,26 @@ async def ml_ensemble_activity(input: AnalysisPipelineInput) -> ActivityResult:
 
 @activity.defn
 async def confidence_calibration_activity(input: AnalysisPipelineInput) -> ActivityResult:
-    # TODO(ENG-3f): Conformal prediction wrapping upstream scores
+    from services.calibration.repository import CalibrationRepository
+    from services.calibration.service import CalibrationService
+    from shared.auth.tenant_context import tenant_scope
+    from shared.database import get_session_factory
+
+    factory = get_session_factory()
+    async with factory() as session, tenant_scope(session, input.tenant_id):
+        repo = CalibrationRepository(session)
+        service = CalibrationService(repo)
+        await service.calibrate_findings(
+            tenant_id=input.tenant_id,
+            building_id=input.building_id,
+            correlation_id=input.correlation_id,
+        )
+        await session.commit()
+
     return ActivityResult(
         step_name="confidence_calibration",
         status="completed",
-        detail=f"TODO(ENG-3f): stub for tenant={input.tenant_id}",
+        detail=f"Calibrated findings for building={input.building_id}",
     )
 
 

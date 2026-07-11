@@ -55,6 +55,8 @@ dev = [
     "mypy>=1.10",
     "pip-tools>=7.4",
     "testcontainers[kafka]>=4.4",
+    "types-PyYAML>=6.0",
+    "pandas-stubs>=2.2",
 ]
 ml = [
     "torch>=2.3",
@@ -83,6 +85,9 @@ select = [
     "SIM", # flake8-simplify
 ]
 ignore = ["S101"] # allow assert in tests
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/**" = ["T201", "S603"] # CLI scripts print to stdout and shell out to git/trusted tools by design
 
 [tool.ruff.lint.isort]
 known-first-party = ["apps", "services", "shared", "models", "orchestration"]
@@ -113,3 +118,7 @@ python_version = "3.11"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = "statsmodels.*"
+ignore_missing_imports = true # statsmodels ships no py.typed marker / stubs upstream

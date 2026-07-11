@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
+from temporalio import activity
 from temporalio.client import (
     Schedule,
     ScheduleActionStartWorkflow,
@@ -22,13 +23,34 @@ from temporalio.worker import Worker
 
 from orchestration.temporal.activities.drift_detection_stub import drift_detection_activity
 from orchestration.temporal.activities.retraining_stub import retraining_activity
-from orchestration.temporal.dto import DriftDetectionInput, RetrainingInput
+from orchestration.temporal.dto import ActivityResult, DriftDetectionInput, RetrainingInput
 from orchestration.temporal.schedules.drift_detection import (
     register_drift_detection_schedule,
 )
 from orchestration.temporal.schedules.retraining import register_retraining_schedule
 from orchestration.temporal.workflows.drift_detection import DriftDetectionWorkflow
 from orchestration.temporal.workflows.retraining import RetrainingWorkflow
+
+
+# CONFIRMED BUG (pre-ENG-4 integration audit): drift_detection_activity in
+# drift_detection_stub.py stopped being a stub once ENG-3e (Drift Detection)
+# was integrated -- it now opens a real SQLAlchemy session against a live
+# database. The two @pytest.mark.unit tests below that use it (not the
+# @pytest.mark.integration ones further down, which use start_local() and a
+# different infra tier) predate that merge and were never updated. The
+# workflow calls this activity with retry_policy=None, which in the Temporal
+# Python SDK means "use the default retry policy" (retries indefinitely) --
+# not "no retries." With no database reachable in the test-unit CI job, this
+# hung (test-unit ran 50+ minutes with no completion) until this fix. Same
+# root cause, same fix pattern as test_analysis_pipeline.py and
+# test_signal_query.py's confidence_calibration_activity fix.
+@activity.defn(name="drift_detection_activity")
+async def mocked_drift_detection_activity(input: DriftDetectionInput) -> ActivityResult:
+    return ActivityResult(
+        step_name="drift_detection",
+        status="completed",
+        detail="Mocked drift detection",
+    )
 
 
 @pytest.mark.unit
@@ -41,7 +63,7 @@ async def test_drift_detection_workflow_executes() -> None:
             env.client,
             task_queue="test-queue",
             workflows=[DriftDetectionWorkflow],
-            activities=[drift_detection_activity],
+            activities=[mocked_drift_detection_activity],
         ),
     ):
         result = await env.client.execute_workflow(
@@ -189,7 +211,7 @@ async def test_drift_detection_rejects_empty_tenant() -> None:
             env.client,
             task_queue="test-queue",
             workflows=[DriftDetectionWorkflow],
-            activities=[drift_detection_activity],
+            activities=[mocked_drift_detection_activity],
         ),
     ):
         from temporalio.client import WorkflowFailureError

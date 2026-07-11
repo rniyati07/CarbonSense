@@ -8,3 +8,6 @@ class KafkaSettings(BaseSettings):
 
     bootstrap_servers: str = "localhost:9092"
     topic_data_arrived: str = "building.data.arrived"
+    topic_model_drift_detected: str = "model.drift.detected"
+    topic_customer_notification: str = "customer.notification.created"
+    topic_retraining_eligible: str = "model.retraining.eligible"

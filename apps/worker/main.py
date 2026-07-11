@@ -17,10 +17,15 @@ from orchestration.temporal.activities.analysis_stubs import (
 )
 from orchestration.temporal.activities.drift_detection_stub import drift_detection_activity
 from orchestration.temporal.activities.hello_world import greet_activity
+from orchestration.temporal.activities.ml_ensemble_activities import (
+    train_autoencoder_activity,
+    train_isolation_forest_activity,
+)
 from orchestration.temporal.activities.retraining_stub import retraining_activity
 from orchestration.temporal.workflows.analysis_pipeline import AnalysisPipelineWorkflow
 from orchestration.temporal.workflows.drift_detection import DriftDetectionWorkflow
 from orchestration.temporal.workflows.hello_world import HelloWorldWorkflow
+from orchestration.temporal.workflows.ml_ensemble_training import MLEnsembleTrainingWorkflow
 from orchestration.temporal.workflows.retraining import RetrainingWorkflow
 from shared.config.temporal import TemporalSettings
 
@@ -40,6 +45,7 @@ async def run_worker() -> None:
             AnalysisPipelineWorkflow,
             DriftDetectionWorkflow,
             RetrainingWorkflow,
+            MLEnsembleTrainingWorkflow,
         ],
         activities=[
             greet_activity,
@@ -52,6 +58,8 @@ async def run_worker() -> None:
             root_cause_attribution_activity,
             drift_detection_activity,
             retraining_activity,
+            train_isolation_forest_activity,
+            train_autoencoder_activity,
         ],
     )
     await worker.run()
