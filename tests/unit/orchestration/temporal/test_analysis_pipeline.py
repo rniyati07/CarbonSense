@@ -13,7 +13,6 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from orchestration.temporal.activities.analysis_stubs import (
-    data_quality_gate_activity,
     feature_assembly_activity,
     ml_ensemble_activity,
     root_cause_attribution_activity,
@@ -23,6 +22,7 @@ from orchestration.temporal.activities.analysis_stubs import (
 from orchestration.temporal.dto import (
     ActivityResult,
     AnalysisPipelineInput,
+    DataQualityGateOutput,
     HumanReviewSignal,
 )
 from orchestration.temporal.workflows.analysis_pipeline import AnalysisPipelineWorkflow
@@ -58,8 +58,20 @@ async def mocked_confidence_calibration_activity(
     )
 
 
+# Same rationale as above, now also true of data_quality_gate_activity since
+# the ENG-2c-wiring Phase 1 commit (see services/ingestion/repository.py):
+# it opens a real DB session and parses tenant_id/building_id as UUIDs, so
+# this workflow-orchestration test must not depend on either a live database
+# or on its fixture strings being valid UUIDs.
+@activity.defn(name="data_quality_gate_activity")
+async def mocked_data_quality_gate_activity(
+    input: AnalysisPipelineInput,
+) -> DataQualityGateOutput:
+    return DataQualityGateOutput(overall_status="pass", pass_count=1)
+
+
 ALL_ACTIVITIES = [
-    data_quality_gate_activity,
+    mocked_data_quality_gate_activity,
     rule_engine_activity,
     stl_detection_activity,
     feature_assembly_activity,

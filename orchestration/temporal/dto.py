@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from uuid import UUID
 
 from models.feature_store.feature_set_v1 import FeatureSetV1
+from services.calibration.dto import CalibratedScore
 from services.explainability.models import ExplainabilityBundle
 from services.ml_ensemble.models import EnsembleScoreRecord
 from services.rules_engine.models import Finding
@@ -98,19 +99,12 @@ class MLEnsembleOutput:
 
 
 @dataclass(frozen=True)
-class CalibratedScore:
-    """One reading's calibrated confidence band, keyed for downstream
-    matching back to its EnsembleScoreRecord (circuit_id, ts)."""
-
-    circuit_id: UUID
-    ts: datetime.datetime
-    confidence_lower: float
-    confidence_upper: float
-    is_cold_start: bool
-
-
-@dataclass(frozen=True)
 class ConfidenceCalibrationOutput:
+    # CalibratedScore is owned by services.calibration.dto (the service that
+    # produces it), not defined here -- services must not depend on the
+    # orchestration layer, so this DTO imports from the service, matching
+    # the direction every other field on this page already uses
+    # (Finding, FeatureSetV1, etc. are all owned by their services too).
     calibrated_scores: list[CalibratedScore] = field(default_factory=list)
 
 
