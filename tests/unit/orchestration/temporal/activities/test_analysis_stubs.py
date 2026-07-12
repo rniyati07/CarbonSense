@@ -10,10 +10,16 @@ from temporalio.exceptions import ApplicationError
 
 from orchestration.temporal.activities.analysis_stubs import (
     data_quality_gate_activity,
+    feature_assembly_activity,
     rule_engine_activity,
     stl_detection_activity,
 )
-from orchestration.temporal.dto import AnalysisPipelineInput
+from orchestration.temporal.dto import (
+    AnalysisPipelineInput,
+    RuleEngineOutput,
+    RuleFireEvent,
+    STLOutput,
+)
 
 
 def _patched_db(counts: dict[str, int]):
@@ -318,3 +324,80 @@ class TestSTLDetectionActivity:
 
         assert len(result.residuals) == 1
         assert result.residuals[0].circuit_id == circuit_ok
+
+
+class TestFeatureAssemblyActivity:
+    @pytest.mark.asyncio
+    async def test_assembles_features_using_rule_and_stl_outputs(self) -> None:
+        from services.ingestion.models import NormalizedReading
+        from services.stl_detection.models import STLResidualResult
+
+        tenant_id, circuit_id = uuid4(), uuid4()
+        ts = datetime.datetime(2026, 1, 5, 10, 0, tzinfo=datetime.UTC)
+        reading = NormalizedReading(
+            tenant_id=tenant_id,
+            circuit_id=circuit_id,
+            ts=ts,
+            kwh=5.0,
+            source_system="db",
+            ingestion_timestamp=ts,
+            normalization_version="v1",
+        )
+        stl_result = STLResidualResult(
+            tenant_id=tenant_id,
+            circuit_id=circuit_id,
+            ts=ts,
+            kwh=5.0,
+            day_type="business_day",
+            stl_residual=0.4,
+            residual_zscore=1.2,
+            residual_magnitude=0.4,
+            is_anomalous=False,
+            low_data_quality=False,
+        )
+        rule_fire = RuleFireEvent(circuit_id=circuit_id, ts=ts, rule_id="hvac_after_hours_v3")
+
+        p1, p2 = _patched_session()
+        with (
+            p1,
+            p2,
+            patch(
+                "services.stl_detection.repository.STLReadingsRepository.get_readings_by_circuit",
+                AsyncMock(return_value={circuit_id: [reading]}),
+            ),
+        ):
+            result = await feature_assembly_activity(
+                AnalysisPipelineInput(
+                    tenant_id=str(uuid4()), building_id=str(uuid4()), correlation_id="c1"
+                ),
+                RuleEngineOutput(findings=[], rule_fires=[rule_fire]),
+                STLOutput(residuals=[stl_result]),
+            )
+
+        assert len(result.features) == 1
+        feature = result.features[0]
+        assert feature.circuit_id == circuit_id
+        assert feature.stl_residual_magnitude == 0.4
+        assert feature.day_type == "business_day"
+        assert feature.rule_fire_indicators == {"hvac_after_hours_v3": True}
+
+    @pytest.mark.asyncio
+    async def test_no_readings_returns_empty_features(self) -> None:
+        p1, p2 = _patched_session()
+        with (
+            p1,
+            p2,
+            patch(
+                "services.stl_detection.repository.STLReadingsRepository.get_readings_by_circuit",
+                AsyncMock(return_value={}),
+            ),
+        ):
+            result = await feature_assembly_activity(
+                AnalysisPipelineInput(
+                    tenant_id=str(uuid4()), building_id=str(uuid4()), correlation_id="c1"
+                ),
+                RuleEngineOutput(findings=[], rule_fires=[]),
+                STLOutput(residuals=[]),
+            )
+
+        assert result.features == []

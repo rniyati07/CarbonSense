@@ -10,6 +10,7 @@ from orchestration.temporal.dto import (
     ActivityResult,
     AnalysisPipelineInput,
     DataQualityGateOutput,
+    FeatureAssemblyOutput,
     RuleEngineOutput,
     RuleFireEvent,
     STLOutput,
@@ -194,13 +195,71 @@ async def stl_detection_activity(input: AnalysisPipelineInput) -> STLOutput:
 
 
 @activity.defn
-async def feature_assembly_activity(input: AnalysisPipelineInput) -> ActivityResult:
-    # TODO(ENG-3d-1): Assemble feature_set_v1 from rule/STL/calendar outputs
-    return ActivityResult(
-        step_name="feature_assembly",
-        status="completed",
-        detail=f"TODO(ENG-3d-1): stub for tenant={input.tenant_id}",
+async def feature_assembly_activity(
+    input: AnalysisPipelineInput,
+    rule_output: RuleEngineOutput,
+    stl_output: STLOutput,
+) -> FeatureAssemblyOutput:
+    """Layer 3.5: Feature Assembly (ENG-3d-1), run per-circuit.
+
+    rule_output/stl_output arrive as explicit parameters, not DB reads --
+    rule fires and STL residual fields are never persisted (see
+    orchestration/temporal/dto.py's module docstring on architecture
+    decision 4b); this activity is the only place they can still be read,
+    since it runs directly after the parallel Rule Engine / STL Detection
+    step within the same workflow execution.
+
+    Reuses STLReadingsRepository for the same per-circuit readings both
+    rule_engine_activity and stl_detection_activity already fetched --
+    Feature Assembly needs the raw NormalizedReading objects themselves
+    (for rolling-statistic computation), not either activity's derived
+    output, so re-fetching here (rather than threading readings through
+    the workflow as a third DTO) keeps the workflow's DTOs limited to
+    what each layer actually produces.
+    """
+    from collections import defaultdict
+
+    from models.feature_store.feature_set_v1 import FeatureSetV1STLFields
+    from services.ml_ensemble.feature_assembly import FeatureAssembler
+    from services.stl_detection.repository import STLReadingsRepository
+    from shared.auth.tenant_context import tenant_scope
+    from shared.database import get_session_factory
+
+    tenant_id = UUID(input.tenant_id)
+    building_id = UUID(input.building_id)
+    window_end = datetime.datetime.now(datetime.UTC)
+    window_start = window_end - datetime.timedelta(days=input.window_days)
+
+    factory = get_session_factory()
+    async with factory() as session, tenant_scope(session, tenant_id):
+        readings_by_circuit = await STLReadingsRepository(session).get_readings_by_circuit(
+            building_id, window_start, window_end
+        )
+
+    stl_fields_by_circuit: dict[UUID, dict[datetime.datetime, FeatureSetV1STLFields]] = defaultdict(
+        dict
     )
+    for residual in stl_output.residuals:
+        stl_fields_by_circuit[residual.circuit_id][residual.ts] = (
+            FeatureSetV1STLFields.from_stl_result(residual)
+        )
+
+    rule_fires_by_circuit: dict[UUID, dict[datetime.datetime, dict[str, bool]]] = defaultdict(dict)
+    for fire in rule_output.rule_fires:
+        rule_fires_by_circuit[fire.circuit_id].setdefault(fire.ts, {})[fire.rule_id] = True
+
+    assembler = FeatureAssembler()
+    features = []
+    for circuit_id, readings in readings_by_circuit.items():
+        features.extend(
+            assembler.assemble(
+                readings=readings,
+                stl_fields_by_ts=stl_fields_by_circuit.get(circuit_id, {}),
+                rule_fires_by_ts=rule_fires_by_circuit.get(circuit_id, {}),
+            )
+        )
+
+    return FeatureAssemblyOutput(features=features)
 
 
 @activity.defn

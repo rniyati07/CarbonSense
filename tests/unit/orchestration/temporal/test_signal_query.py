@@ -16,7 +16,6 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from orchestration.temporal.activities.analysis_stubs import (
-    feature_assembly_activity,
     ml_ensemble_activity,
     root_cause_attribution_activity,
 )
@@ -24,6 +23,7 @@ from orchestration.temporal.dto import (
     ActivityResult,
     AnalysisPipelineInput,
     DataQualityGateOutput,
+    FeatureAssemblyOutput,
     HumanReviewSignal,
     RuleEngineOutput,
     STLOutput,
@@ -71,11 +71,22 @@ async def mocked_stl_detection_activity(input: AnalysisPipelineInput) -> STLOutp
     return STLOutput(residuals=[])
 
 
+# Same rationale, now also true of feature_assembly_activity since the
+# ENG-2c-wiring Phase 5 commit gave it a real (input, rule_output,
+# stl_output) signature, a real DB session, and a FeatureAssemblyOutput
+# return type -- see the matching comment in test_analysis_pipeline.py
+# for why the mock's return type must track the real function's, not
+# the workflow's still-unmodified call-site arg count.
+@activity.defn(name="feature_assembly_activity")
+async def mocked_feature_assembly_activity(input: AnalysisPipelineInput) -> FeatureAssemblyOutput:
+    return FeatureAssemblyOutput(features=[])
+
+
 ALL_ACTIVITIES = [
     mocked_data_quality_gate_activity,
     mocked_rule_engine_activity,
     mocked_stl_detection_activity,
-    feature_assembly_activity,
+    mocked_feature_assembly_activity,
     ml_ensemble_activity,
     mocked_confidence_calibration_activity,
     root_cause_attribution_activity,
