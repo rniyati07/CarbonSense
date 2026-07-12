@@ -69,8 +69,11 @@ class LocalModelRegistry:
     """Implements ModelRegistryProtocol against MLflow's local tracking store."""
 
     def __init__(self, tracking_uri: str | None = None) -> None:
-        if tracking_uri:
-            mlflow.set_tracking_uri(tracking_uri)
+        if tracking_uri is None:
+            from shared.config.ml_registry import LocalModelRegistrySettings
+
+            tracking_uri = LocalModelRegistrySettings().tracking_uri
+        mlflow.set_tracking_uri(tracking_uri)
         self._tracking_uri = tracking_uri
 
     def save_training_result(self, result: TrainingRunResult) -> None:
@@ -149,8 +152,7 @@ class LocalModelRegistry:
         )
         if runs.empty:
             raise ModelNotRegisteredError(
-                f"No {model_type} training run found for tenant={tenant_id} "
-                f"building={building_id}"
+                f"No {model_type} training run found for tenant={tenant_id} building={building_id}"
             )
         return str(runs.iloc[0]["run_id"])
 

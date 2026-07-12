@@ -1,17 +1,57 @@
 from __future__ import annotations
 
-from temporalio import activity
+import datetime
+from uuid import UUID
 
-from orchestration.temporal.dto import ActivityResult, AnalysisPipelineInput
+from temporalio import activity
+from temporalio.exceptions import ApplicationError
+
+from orchestration.temporal.dto import ActivityResult, AnalysisPipelineInput, DataQualityGateOutput
 
 
 @activity.defn
-async def data_quality_gate_activity(input: AnalysisPipelineInput) -> ActivityResult:
-    # TODO(ENG-3a): Port v1 normalization logic, stuck-at-value/dropout detection
-    return ActivityResult(
-        step_name="data_quality_gate",
-        status="completed",
-        detail=f"TODO(ENG-3a): stub for tenant={input.tenant_id}",
+async def data_quality_gate_activity(input: AnalysisPipelineInput) -> DataQualityGateOutput:
+    """Layer 1 verification (retained per approval; see services/ingestion/
+    repository.py's module docstring for why this checks already-persisted
+    data rather than re-running DataQualityGate.process_batch()).
+
+    Raises a non-retryable ApplicationError when the analysis window has no
+    pass/degraded data at all -- mirroring TRD v2.0 3.1's rule that "a
+    quarantined-only batch does not trigger downstream analysis."
+    """
+    from services.ingestion.repository import DataQualityVerificationRepository
+    from shared.auth.tenant_context import tenant_scope
+    from shared.database import get_session_factory
+
+    tenant_id = UUID(input.tenant_id)
+    building_id = UUID(input.building_id)
+    window_end = datetime.datetime.now(datetime.UTC)
+    window_start = window_end - datetime.timedelta(days=input.window_days)
+
+    factory = get_session_factory()
+    async with factory() as session, tenant_scope(session, tenant_id):
+        repo = DataQualityVerificationRepository(session)
+        counts = await repo.get_status_counts(building_id, window_start, window_end)
+
+    pass_count = counts.get("pass", 0)
+    degraded_count = counts.get("degraded", 0)
+    quarantined_count = counts.get("quarantined", 0)
+
+    if pass_count == 0 and degraded_count == 0:
+        raise ApplicationError(
+            f"No pass/degraded normalized_readings for building={input.building_id} "
+            f"in the last {input.window_days} days "
+            f"(quarantined={quarantined_count}) -- per TRD v2.0 3.1, a "
+            "quarantined-only (or empty) batch does not trigger downstream analysis.",
+            non_retryable=True,
+        )
+
+    overall_status = "degraded" if degraded_count > 0 else "pass"
+    return DataQualityGateOutput(
+        overall_status=overall_status,
+        pass_count=pass_count,
+        degraded_count=degraded_count,
+        quarantined_count=quarantined_count,
     )
 
 

@@ -4,11 +4,11 @@ import datetime
 from dataclasses import dataclass, field
 from uuid import UUID
 
+from models.feature_store.feature_set_v1 import FeatureSetV1
 from services.explainability.models import ExplainabilityBundle
 from services.ml_ensemble.models import EnsembleScoreRecord
 from services.rules_engine.models import Finding
 from services.stl_detection.models import STLResidualResult
-from models.feature_store.feature_set_v1 import FeatureSetV1
 
 
 @dataclass(frozen=True)
@@ -43,6 +43,22 @@ class AnalysisPipelineInput:
 # temporalio version before relying on it here, since the wrong assumption
 # would fail silently until workflow execution.
 # --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class DataQualityGateOutput:
+    """Result of the retained, lightweight Data Quality Gate verification
+    (see services/ingestion/repository.py's module docstring for why this
+    checks already-persisted data rather than re-running
+    DataQualityGate.process_batch()). Mirrors BatchQualityResult's status
+    fields (services/ingestion/models.py) without the raw-row fields that
+    don't exist at this point in the pipeline.
+    """
+
+    overall_status: str  # "pass" | "degraded" | "quarantined"
+    pass_count: int = 0
+    degraded_count: int = 0
+    quarantined_count: int = 0
 
 
 @dataclass(frozen=True)
