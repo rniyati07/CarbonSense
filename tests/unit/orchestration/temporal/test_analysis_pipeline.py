@@ -16,14 +16,14 @@ from orchestration.temporal.activities.analysis_stubs import (
     feature_assembly_activity,
     ml_ensemble_activity,
     root_cause_attribution_activity,
-    rule_engine_activity,
-    stl_detection_activity,
 )
 from orchestration.temporal.dto import (
     ActivityResult,
     AnalysisPipelineInput,
     DataQualityGateOutput,
     HumanReviewSignal,
+    RuleEngineOutput,
+    STLOutput,
 )
 from orchestration.temporal.workflows.analysis_pipeline import AnalysisPipelineWorkflow
 
@@ -70,10 +70,24 @@ async def mocked_data_quality_gate_activity(
     return DataQualityGateOutput(overall_status="pass", pass_count=1)
 
 
+# Same rationale, now also true of rule_engine_activity and
+# stl_detection_activity since the ENG-2c-wiring Phase 4 commit made both
+# open real DB sessions and parse tenant_id/building_id as UUIDs (see
+# services/rules_engine/repository.py, services/stl_detection/repository.py).
+@activity.defn(name="rule_engine_activity")
+async def mocked_rule_engine_activity(input: AnalysisPipelineInput) -> RuleEngineOutput:
+    return RuleEngineOutput(findings=[], rule_fires=[])
+
+
+@activity.defn(name="stl_detection_activity")
+async def mocked_stl_detection_activity(input: AnalysisPipelineInput) -> STLOutput:
+    return STLOutput(residuals=[])
+
+
 ALL_ACTIVITIES = [
     mocked_data_quality_gate_activity,
-    rule_engine_activity,
-    stl_detection_activity,
+    mocked_rule_engine_activity,
+    mocked_stl_detection_activity,
     feature_assembly_activity,
     ml_ensemble_activity,
     mocked_confidence_calibration_activity,
