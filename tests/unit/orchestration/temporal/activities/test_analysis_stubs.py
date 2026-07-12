@@ -11,11 +11,13 @@ from temporalio.exceptions import ApplicationError
 from orchestration.temporal.activities.analysis_stubs import (
     data_quality_gate_activity,
     feature_assembly_activity,
+    ml_ensemble_activity,
     rule_engine_activity,
     stl_detection_activity,
 )
 from orchestration.temporal.dto import (
     AnalysisPipelineInput,
+    FeatureAssemblyOutput,
     RuleEngineOutput,
     RuleFireEvent,
     STLOutput,
@@ -401,3 +403,48 @@ class TestFeatureAssemblyActivity:
             )
 
         assert result.features == []
+
+
+class TestMLEnsembleActivity:
+    @pytest.mark.asyncio
+    async def test_scores_features_via_ensemble_serving_service(self) -> None:
+        from models.feature_store.feature_set_v1 import FeatureSetV1
+        from services.ml_ensemble.models import EnsembleScoreRecord
+
+        tenant_id, circuit_id = uuid4(), uuid4()
+        ts = datetime.datetime.now(datetime.UTC)
+        feature = FeatureSetV1(tenant_id=tenant_id, circuit_id=circuit_id, ts=ts)
+        score = EnsembleScoreRecord(
+            tenant_id=tenant_id, circuit_id=circuit_id, ts=ts, ensemble_is_anomalous=True
+        )
+
+        with patch(
+            "models.serving.ensemble_serving.EnsembleServingService.score",
+            return_value=[score],
+        ) as mock_score:
+            result = await ml_ensemble_activity(
+                AnalysisPipelineInput(
+                    tenant_id=str(uuid4()), building_id=str(uuid4()), correlation_id="c1"
+                ),
+                FeatureAssemblyOutput(features=[feature]),
+            )
+
+        mock_score.assert_called_once()
+        call_kwargs = mock_score.call_args.kwargs
+        assert call_kwargs["features"] == [feature]
+        assert result.scores == [score]
+
+    @pytest.mark.asyncio
+    async def test_no_features_returns_empty_scores(self) -> None:
+        with patch(
+            "models.serving.ensemble_serving.EnsembleServingService.score",
+            return_value=[],
+        ):
+            result = await ml_ensemble_activity(
+                AnalysisPipelineInput(
+                    tenant_id=str(uuid4()), building_id=str(uuid4()), correlation_id="c1"
+                ),
+                FeatureAssemblyOutput(features=[]),
+            )
+
+        assert result.scores == []

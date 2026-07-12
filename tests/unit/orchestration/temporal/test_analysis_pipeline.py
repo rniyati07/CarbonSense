@@ -13,7 +13,6 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from orchestration.temporal.activities.analysis_stubs import (
-    ml_ensemble_activity,
     root_cause_attribution_activity,
 )
 from orchestration.temporal.dto import (
@@ -22,6 +21,7 @@ from orchestration.temporal.dto import (
     DataQualityGateOutput,
     FeatureAssemblyOutput,
     HumanReviewSignal,
+    MLEnsembleOutput,
     RuleEngineOutput,
     STLOutput,
 )
@@ -103,12 +103,20 @@ async def mocked_feature_assembly_activity(input: AnalysisPipelineInput) -> Feat
     return FeatureAssemblyOutput(features=[])
 
 
+# Same rationale, now also true of ml_ensemble_activity since the
+# ENG-2c-wiring Phase 6 commit gave it a real (input, feature_output)
+# signature and an MLEnsembleOutput return type.
+@activity.defn(name="ml_ensemble_activity")
+async def mocked_ml_ensemble_activity(input: AnalysisPipelineInput) -> MLEnsembleOutput:
+    return MLEnsembleOutput(scores=[])
+
+
 ALL_ACTIVITIES = [
     mocked_data_quality_gate_activity,
     mocked_rule_engine_activity,
     mocked_stl_detection_activity,
     mocked_feature_assembly_activity,
-    ml_ensemble_activity,
+    mocked_ml_ensemble_activity,
     mocked_confidence_calibration_activity,
     root_cause_attribution_activity,
 ]

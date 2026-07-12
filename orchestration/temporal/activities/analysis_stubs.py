@@ -11,6 +11,7 @@ from orchestration.temporal.dto import (
     AnalysisPipelineInput,
     DataQualityGateOutput,
     FeatureAssemblyOutput,
+    MLEnsembleOutput,
     RuleEngineOutput,
     RuleFireEvent,
     STLOutput,
@@ -263,13 +264,37 @@ async def feature_assembly_activity(
 
 
 @activity.defn
-async def ml_ensemble_activity(input: AnalysisPipelineInput) -> ActivityResult:
-    # TODO(ENG-3d): Isolation Forest + Windowed Autoencoder inference
-    return ActivityResult(
-        step_name="ml_ensemble",
-        status="completed",
-        detail=f"TODO(ENG-3d): stub for tenant={input.tenant_id}",
+async def ml_ensemble_activity(
+    input: AnalysisPipelineInput,
+    feature_output: FeatureAssemblyOutput,
+) -> MLEnsembleOutput:
+    """Layer 4: ML Ensemble scoring (ENG-3d-4).
+
+    LocalModelRegistry (wired in Phase 1, shared/config/ml_registry.py) is
+    the ModelRegistryProtocol implementation; EnsembleServingService
+    already handles a missing/untrained model gracefully per-model (catches
+    exceptions around load, see models/serving/ensemble_serving.py), so a
+    cold-start building simply yields None-valued scores here rather than
+    failing the activity. No DB session is needed -- FeatureSetV1 rows
+    arrive directly via feature_output, and scoring is pure in-process
+    numpy/torch inference (see ensemble_serving.py's module docstring).
+    """
+    from models.serving.ensemble_serving import EnsembleServingService
+    from models.serving.local_registry import LocalModelRegistry
+    from services.ml_ensemble.config import MLEnsembleConfig
+
+    tenant_id = UUID(input.tenant_id)
+    building_id = UUID(input.building_id)
+
+    config = MLEnsembleConfig()
+    service = EnsembleServingService(LocalModelRegistry())
+    scores = service.score(
+        tenant_id=tenant_id,
+        building_id=building_id,
+        features=feature_output.features,
+        window_length_hours=config.window_length_hours,
     )
+    return MLEnsembleOutput(scores=scores)
 
 
 @activity.defn
