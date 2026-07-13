@@ -1,21 +1,25 @@
 from __future__ import annotations
 
 import datetime
+import logging
 from uuid import UUID
 
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
 from orchestration.temporal.dto import (
-    ActivityResult,
     AnalysisPipelineInput,
+    ConfidenceCalibrationOutput,
     DataQualityGateOutput,
+    ExplainabilityOutput,
     FeatureAssemblyOutput,
     MLEnsembleOutput,
     RuleEngineOutput,
     RuleFireEvent,
     STLOutput,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @activity.defn
@@ -298,35 +302,155 @@ async def ml_ensemble_activity(
 
 
 @activity.defn
-async def confidence_calibration_activity(input: AnalysisPipelineInput) -> ActivityResult:
+async def confidence_calibration_activity(
+    input: AnalysisPipelineInput,
+    ml_output: MLEnsembleOutput,
+) -> ConfidenceCalibrationOutput:
+    """Layer 6: Confidence Calibration (ENG-3f).
+
+    Runs both CalibrationService entry points (Phase 3 refactor) in the
+    same DB transaction:
+      - calibrate_findings(): unchanged, DB-polling, persists confidence
+        for the domain-rule Findings rule_engine_activity already
+        inserted (findings WHERE confidence IS NULL).
+      - calibrate_ensemble_scores(): new, takes ml_output.scores directly,
+        does NOT persist (architecture decision 4c/4d) -- no Finding
+        exists yet for ML/STL-sourced anomalies at this point (Root-Cause
+        Attribution creates it next). calibrated_scores is carried
+        forward via ConfidenceCalibrationOutput for that activity to
+        consume when building the ExplainabilityBundle's confidence_band.
+    """
     from services.calibration.repository import CalibrationRepository
     from services.calibration.service import CalibrationService
     from shared.auth.tenant_context import tenant_scope
     from shared.database import get_session_factory
 
+    tenant_id = UUID(input.tenant_id)
+    building_id = UUID(input.building_id)
+
     factory = get_session_factory()
-    async with factory() as session, tenant_scope(session, input.tenant_id):
+    async with factory() as session, tenant_scope(session, tenant_id):
         repo = CalibrationRepository(session)
         service = CalibrationService(repo)
         await service.calibrate_findings(
-            tenant_id=input.tenant_id,
-            building_id=input.building_id,
+            tenant_id=tenant_id,
+            building_id=building_id,
             correlation_id=input.correlation_id,
+        )
+        calibrated_scores = await service.calibrate_ensemble_scores(
+            tenant_id=tenant_id,
+            building_id=building_id,
+            scores=ml_output.scores,
         )
         await session.commit()
 
-    return ActivityResult(
-        step_name="confidence_calibration",
-        status="completed",
-        detail=f"Calibrated findings for building={input.building_id}",
-    )
+    return ConfidenceCalibrationOutput(calibrated_scores=calibrated_scores)
 
 
 @activity.defn
-async def root_cause_attribution_activity(input: AnalysisPipelineInput) -> ActivityResult:
-    # TODO(ENG-3g): SHAP values + Explainability Bundle assembly
-    return ActivityResult(
-        step_name="root_cause_attribution",
-        status="completed",
-        detail=f"TODO(ENG-3g): stub for tenant={input.tenant_id}",
+async def root_cause_attribution_activity(
+    input: AnalysisPipelineInput,
+    feature_output: FeatureAssemblyOutput,
+    calibration_output: ConfidenceCalibrationOutput,
+) -> ExplainabilityOutput:
+    """Layer 7: Root-Cause Attribution (ENG-3g) -- the only INSERT point for
+    ML/STL-sourced findings (see services/explainability/repository.py's
+    module docstring).
+
+    calibration_output.calibrated_scores already contains only
+    ensemble_is_anomalous=True records (filtered by
+    CalibrationService.calibrate_ensemble_scores(), Phase 3). For each one,
+    builds a SHAP explanation against the building's trained Isolation
+    Forest and assembles a Finding + ExplainabilityBundle via
+    BundleAssembler -- the HARD RULE single path to
+    findings.explainability_bundle, per that module's own docstring.
+
+    A building with no trained Isolation Forest yet (cold-start, nothing
+    registered) cannot produce a non-fabricated SHAP explanation --
+    BundleAssembler requires non-empty top_features for ml_ensemble
+    findings -- so those anomalies are skipped rather than persisted with
+    fabricated attributions. This mirrors the same no-fabrication
+    precedent already established by STL's calendar-awareness hard
+    constraint and the Data Quality Gate's real-data-only verification.
+    """
+    from uuid import uuid4
+
+    from models.feature_store.feature_set_v1 import FeatureSetV1
+    from models.serving.local_registry import LocalModelRegistry
+    from services.explainability.bundle_assembler import BundleAssembler
+    from services.explainability.models import ConfidenceBand, EvidenceWindow
+    from services.explainability.repository import ExplainabilityRepository
+    from services.explainability.shap_explainer import SHAPExplainer
+    from services.rules_engine.models import Finding
+    from shared.auth.tenant_context import tenant_scope
+    from shared.database import get_session_factory
+
+    tenant_id = UUID(input.tenant_id)
+    building_id = UUID(input.building_id)
+
+    if not calibration_output.calibrated_scores:
+        return ExplainabilityOutput(persisted_finding_ids=[], bundles=[])
+
+    registry = LocalModelRegistry()
+    try:
+        if_model, _scaler, rule_ids = registry.load_isolation_forest(tenant_id, building_id)
+    except Exception:
+        logger.warning(
+            "No trained Isolation Forest for tenant=%s building=%s -- skipping "
+            "Root-Cause Attribution for %d anomalous score(s) rather than "
+            "fabricating a SHAP explanation.",
+            tenant_id,
+            building_id,
+            len(calibration_output.calibrated_scores),
+        )
+        return ExplainabilityOutput(persisted_finding_ids=[], bundles=[])
+
+    feature_names = FeatureSetV1.feature_names(rule_ids)
+    explainer = SHAPExplainer(tree_model=if_model, feature_names=feature_names, top_n=5)
+
+    features_by_key = {(f.circuit_id, f.ts): f for f in feature_output.features}
+    assembler = BundleAssembler()
+    findings: list[Finding] = []
+
+    for score in calibration_output.calibrated_scores:
+        feature = features_by_key.get((score.circuit_id, score.ts))
+        if feature is None:
+            continue
+
+        feature_row = dict(zip(feature_names, feature.to_numeric_vector(rule_ids), strict=True))
+        top_features = explainer.explain(feature_row)
+        bundle = assembler.assemble_ml_only(
+            finding_id=uuid4(),
+            top_features=top_features,
+            confidence_band=ConfidenceBand(
+                lower=score.confidence_lower, upper=score.confidence_upper
+            ),
+            evidence_window=EvidenceWindow(start=score.ts, end=score.ts),
+            include_stl=feature.stl_residual_magnitude is not None,
+        )
+
+        findings.append(
+            Finding(
+                finding_id=bundle.finding_id,
+                tenant_id=tenant_id,
+                building_id=building_id,
+                circuit_id=score.circuit_id,
+                layer_origin="ml_ensemble",
+                evidence_window_start=score.ts,
+                evidence_window_end=score.ts,
+                confidence=(score.confidence_lower + score.confidence_upper) / 2,
+                status="open",
+                explainability_bundle=bundle,
+            )
+        )
+
+    if findings:
+        factory = get_session_factory()
+        async with factory() as session, tenant_scope(session, tenant_id):
+            await ExplainabilityRepository(session).save_findings(findings)
+            await session.commit()
+
+    return ExplainabilityOutput(
+        persisted_finding_ids=[f.finding_id for f in findings],
+        bundles=[f.explainability_bundle for f in findings],
     )

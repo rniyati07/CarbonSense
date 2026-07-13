@@ -15,13 +15,11 @@ from temporalio import activity
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from orchestration.temporal.activities.analysis_stubs import (
-    root_cause_attribution_activity,
-)
 from orchestration.temporal.dto import (
-    ActivityResult,
     AnalysisPipelineInput,
+    ConfidenceCalibrationOutput,
     DataQualityGateOutput,
+    ExplainabilityOutput,
     FeatureAssemblyOutput,
     HumanReviewSignal,
     MLEnsembleOutput,
@@ -37,15 +35,14 @@ from orchestration.temporal.workflows.analysis_pipeline import AnalysisPipelineW
 # retry_policy on its workflow.execute_activity() call (Temporal retries
 # indefinitely by default), and this test file was never updated after that
 # merge. Hung both locally and in CI (test-unit ran 50+ minutes) until fixed.
+# Return type is ConfidenceCalibrationOutput (not the old ActivityResult)
+# since the ENG-2c-wiring Phase 7 commit changed the real function's
+# signature and return type.
 @activity.defn(name="confidence_calibration_activity")
 async def mocked_confidence_calibration_activity(
     input: AnalysisPipelineInput,
-) -> ActivityResult:
-    return ActivityResult(
-        step_name="confidence_calibration",
-        status="completed",
-        detail=f"Mocked calibration for tenant={input.tenant_id}",
-    )
+) -> ConfidenceCalibrationOutput:
+    return ConfidenceCalibrationOutput(calibrated_scores=[])
 
 
 # Same rationale, now also true of data_quality_gate_activity since the
@@ -90,6 +87,17 @@ async def mocked_ml_ensemble_activity(input: AnalysisPipelineInput) -> MLEnsembl
     return MLEnsembleOutput(scores=[])
 
 
+# Same rationale, now also true of root_cause_attribution_activity since the
+# ENG-2c-wiring Phase 8 commit gave it a real
+# (input, feature_output, calibration_output) signature and an
+# ExplainabilityOutput return type.
+@activity.defn(name="root_cause_attribution_activity")
+async def mocked_root_cause_attribution_activity(
+    input: AnalysisPipelineInput,
+) -> ExplainabilityOutput:
+    return ExplainabilityOutput(persisted_finding_ids=[], bundles=[])
+
+
 ALL_ACTIVITIES = [
     mocked_data_quality_gate_activity,
     mocked_rule_engine_activity,
@@ -97,7 +105,7 @@ ALL_ACTIVITIES = [
     mocked_feature_assembly_activity,
     mocked_ml_ensemble_activity,
     mocked_confidence_calibration_activity,
-    root_cause_attribution_activity,
+    mocked_root_cause_attribution_activity,
 ]
 
 PIPELINE_INPUT = AnalysisPipelineInput(

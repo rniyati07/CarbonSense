@@ -2,22 +2,26 @@ from __future__ import annotations
 
 import datetime
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from temporalio.exceptions import ApplicationError
 
 from orchestration.temporal.activities.analysis_stubs import (
+    confidence_calibration_activity,
     data_quality_gate_activity,
     feature_assembly_activity,
     ml_ensemble_activity,
+    root_cause_attribution_activity,
     rule_engine_activity,
     stl_detection_activity,
 )
 from orchestration.temporal.dto import (
     AnalysisPipelineInput,
+    ConfidenceCalibrationOutput,
     FeatureAssemblyOutput,
+    MLEnsembleOutput,
     RuleEngineOutput,
     RuleFireEvent,
     STLOutput,
@@ -448,3 +452,188 @@ class TestMLEnsembleActivity:
             )
 
         assert result.scores == []
+
+
+class TestConfidenceCalibrationActivity:
+    @pytest.mark.asyncio
+    async def test_runs_both_entry_points_in_same_session(self) -> None:
+        from services.calibration.dto import CalibratedScore
+        from services.ml_ensemble.models import EnsembleScoreRecord
+
+        circuit_id = uuid4()
+        ts = datetime.datetime.now(datetime.UTC)
+        score = EnsembleScoreRecord(
+            tenant_id=uuid4(), circuit_id=circuit_id, ts=ts, ensemble_is_anomalous=True
+        )
+        calibrated = CalibratedScore(
+            circuit_id=circuit_id,
+            ts=ts,
+            confidence_lower=0.1,
+            confidence_upper=0.9,
+            is_cold_start=False,
+        )
+
+        p1, p2 = _patched_session()
+        calibrate_findings_mock = AsyncMock()
+        calibrate_scores_mock = AsyncMock(return_value=[calibrated])
+        with (
+            p1,
+            p2,
+            patch(
+                "services.calibration.service.CalibrationService.calibrate_findings",
+                calibrate_findings_mock,
+            ),
+            patch(
+                "services.calibration.service.CalibrationService.calibrate_ensemble_scores",
+                calibrate_scores_mock,
+            ),
+        ):
+            result = await confidence_calibration_activity(
+                AnalysisPipelineInput(
+                    tenant_id=str(uuid4()), building_id=str(uuid4()), correlation_id="c1"
+                ),
+                MLEnsembleOutput(scores=[score]),
+            )
+
+        calibrate_findings_mock.assert_awaited_once()
+        calibrate_scores_mock.assert_awaited_once()
+        assert calibrate_scores_mock.call_args.kwargs["scores"] == [score]
+        assert result.calibrated_scores == [calibrated]
+
+
+class TestRootCauseAttributionActivity:
+    @pytest.mark.asyncio
+    async def test_no_calibrated_scores_skips_model_load(self) -> None:
+        with patch(
+            "models.serving.local_registry.LocalModelRegistry.load_isolation_forest"
+        ) as mock_load:
+            result = await root_cause_attribution_activity(
+                AnalysisPipelineInput(
+                    tenant_id=str(uuid4()), building_id=str(uuid4()), correlation_id="c1"
+                ),
+                FeatureAssemblyOutput(features=[]),
+                ConfidenceCalibrationOutput(calibrated_scores=[]),
+            )
+
+        mock_load.assert_not_called()
+        assert result.persisted_finding_ids == []
+        assert result.bundles == []
+
+    @pytest.mark.asyncio
+    async def test_no_trained_model_skips_without_fabricating(self) -> None:
+        from services.calibration.dto import CalibratedScore
+
+        circuit_id, ts = uuid4(), datetime.datetime.now(datetime.UTC)
+        calibrated = CalibratedScore(
+            circuit_id=circuit_id,
+            ts=ts,
+            confidence_lower=0.1,
+            confidence_upper=0.9,
+            is_cold_start=False,
+        )
+        with patch(
+            "models.serving.local_registry.LocalModelRegistry.load_isolation_forest",
+            side_effect=RuntimeError("no model registered"),
+        ):
+            result = await root_cause_attribution_activity(
+                AnalysisPipelineInput(
+                    tenant_id=str(uuid4()), building_id=str(uuid4()), correlation_id="c1"
+                ),
+                FeatureAssemblyOutput(features=[]),
+                ConfidenceCalibrationOutput(calibrated_scores=[calibrated]),
+            )
+
+        assert result.persisted_finding_ids == []
+        assert result.bundles == []
+
+    @pytest.mark.asyncio
+    async def test_persists_findings_with_bundles(self) -> None:
+        from models.feature_store.feature_set_v1 import FeatureSetV1
+        from services.calibration.dto import CalibratedScore
+        from services.explainability.models import TopFeature
+
+        tenant_id, circuit_id = uuid4(), uuid4()
+        ts = datetime.datetime.now(datetime.UTC)
+        feature = FeatureSetV1(tenant_id=tenant_id, circuit_id=circuit_id, ts=ts)
+        calibrated = CalibratedScore(
+            circuit_id=circuit_id,
+            ts=ts,
+            confidence_lower=0.2,
+            confidence_upper=0.8,
+            is_cold_start=False,
+        )
+
+        mock_explainer_instance = MagicMock()
+        mock_explainer_instance.explain.return_value = [
+            TopFeature(feature="rolling_baseline_kwh", shap_value=0.5, plain_language="x")
+        ]
+        mock_explainer_cls = MagicMock(return_value=mock_explainer_instance)
+
+        p1, p2 = _patched_session()
+        save_findings_mock = AsyncMock()
+        with (
+            p1,
+            p2,
+            patch(
+                "models.serving.local_registry.LocalModelRegistry.load_isolation_forest",
+                return_value=(MagicMock(), MagicMock(), []),
+            ),
+            patch("services.explainability.shap_explainer.SHAPExplainer", mock_explainer_cls),
+            patch(
+                "services.explainability.repository.ExplainabilityRepository.save_findings",
+                save_findings_mock,
+            ),
+        ):
+            result = await root_cause_attribution_activity(
+                AnalysisPipelineInput(
+                    tenant_id=str(tenant_id), building_id=str(uuid4()), correlation_id="c1"
+                ),
+                FeatureAssemblyOutput(features=[feature]),
+                ConfidenceCalibrationOutput(calibrated_scores=[calibrated]),
+            )
+
+        save_findings_mock.assert_awaited_once()
+        assert len(result.persisted_finding_ids) == 1
+        assert len(result.bundles) == 1
+        assert result.bundles[0].contributing_layers == ["ml_ensemble"]
+
+    @pytest.mark.asyncio
+    async def test_skips_score_with_no_matching_feature(self) -> None:
+        from services.calibration.dto import CalibratedScore
+
+        calibrated = CalibratedScore(
+            circuit_id=uuid4(),
+            ts=datetime.datetime.now(datetime.UTC),
+            confidence_lower=0.2,
+            confidence_upper=0.8,
+            is_cold_start=False,
+        )
+
+        p1, p2 = _patched_session()
+        save_findings_mock = AsyncMock()
+        with (
+            p1,
+            p2,
+            patch(
+                "models.serving.local_registry.LocalModelRegistry.load_isolation_forest",
+                return_value=(MagicMock(), MagicMock(), []),
+            ),
+            patch(
+                "services.explainability.shap_explainer.SHAPExplainer",
+                MagicMock(return_value=MagicMock()),
+            ),
+            patch(
+                "services.explainability.repository.ExplainabilityRepository.save_findings",
+                save_findings_mock,
+            ),
+        ):
+            result = await root_cause_attribution_activity(
+                AnalysisPipelineInput(
+                    tenant_id=str(uuid4()), building_id=str(uuid4()), correlation_id="c1"
+                ),
+                FeatureAssemblyOutput(features=[]),
+                ConfidenceCalibrationOutput(calibrated_scores=[calibrated]),
+            )
+
+        save_findings_mock.assert_not_awaited()
+        assert result.persisted_finding_ids == []
