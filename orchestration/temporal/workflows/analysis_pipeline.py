@@ -49,7 +49,10 @@ class AnalysisPipelineWorkflow:
         if not input.tenant_id:
             raise ApplicationError("tenant_id is required", non_retryable=True)
 
-        # Layer 1: Data Quality Gate
+        # Layer 1: Data Quality Gate -- lightweight verification against
+        # already-persisted normalized data (see services/ingestion/
+        # repository.py). Raises non-retryable if the window has no
+        # pass/degraded data at all; result isn't needed downstream.
         self._current_step = "data_quality_gate"
         await workflow.execute_activity(
             data_quality_gate_activity,
@@ -58,7 +61,11 @@ class AnalysisPipelineWorkflow:
         )
         self._steps_completed.append("data_quality_gate")
 
-        # Layer 2+3: Rule Engine || STL Detection (parallel)
+        # Layer 2+3: Rule Engine || STL Detection (parallel). Both outputs
+        # are threaded forward as DTOs -- rule fires and STL residual
+        # fields are never persisted (see orchestration/temporal/dto.py's
+        # architecture-decision note), so this is the only place they can
+        # still be read once produced.
         self._current_step = "rule_engine_and_stl_detection"
         rule_task = workflow.execute_activity(
             rule_engine_activity,
@@ -70,33 +77,33 @@ class AnalysisPipelineWorkflow:
             input,
             start_to_close_timeout=timedelta(minutes=5),
         )
-        await asyncio.gather(rule_task, stl_task)
+        rule_output, stl_output = await asyncio.gather(rule_task, stl_task)
         self._steps_completed.append("rule_engine")
         self._steps_completed.append("stl_detection")
 
         # Feature Assembly (feature_set_v1)
         self._current_step = "feature_assembly"
-        await workflow.execute_activity(
+        feature_output = await workflow.execute_activity(
             feature_assembly_activity,
-            input,
+            args=[input, rule_output, stl_output],
             start_to_close_timeout=timedelta(minutes=5),
         )
         self._steps_completed.append("feature_assembly")
 
         # Layer 4: ML Ensemble
         self._current_step = "ml_ensemble"
-        await workflow.execute_activity(
+        ml_output = await workflow.execute_activity(
             ml_ensemble_activity,
-            input,
+            args=[input, feature_output],
             start_to_close_timeout=timedelta(minutes=10),
         )
         self._steps_completed.append("ml_ensemble")
 
         # Layer 6: Confidence Calibration
         self._current_step = "confidence_calibration"
-        await workflow.execute_activity(
+        calibration_output = await workflow.execute_activity(
             confidence_calibration_activity,
-            input,
+            args=[input, ml_output],
             start_to_close_timeout=timedelta(minutes=5),
         )
         self._steps_completed.append("confidence_calibration")
@@ -105,7 +112,7 @@ class AnalysisPipelineWorkflow:
         self._current_step = "root_cause_attribution"
         await workflow.execute_activity(
             root_cause_attribution_activity,
-            input,
+            args=[input, feature_output, calibration_output],
             start_to_close_timeout=timedelta(minutes=5),
         )
         self._steps_completed.append("root_cause_attribution")

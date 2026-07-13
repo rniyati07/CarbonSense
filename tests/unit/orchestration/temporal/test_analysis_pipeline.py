@@ -26,42 +26,24 @@ from orchestration.temporal.dto import (
 from orchestration.temporal.workflows.analysis_pipeline import AnalysisPipelineWorkflow
 
 
-# CONFIRMED BUG (pre-ENG-4 integration audit): confidence_calibration_activity
-# in analysis_stubs.py stopped being a stub once ENG-3f (Confidence Calibration)
-# was integrated -- it now opens a real SQLAlchemy session against a live
-# database (see analysis_stubs.py). This test file predates that merge and
-# was never updated: it imported the real activity into ALL_ACTIVITIES, and
-# the workflow calls it with no retry_policy (Temporal's default retries
-# indefinitely). With no database reachable in this test environment, every
-# attempt fails and the workflow retries forever -- this hung both locally
-# and in CI (test-unit ran 50+ minutes with no completion) until this fix.
+# CONFIRMED BUG (pre-ENG-4 integration audit), still the governing reason
+# every activity below is mocked rather than imported real: several of
+# these activities open a real SQLAlchemy session against a live database
+# or (Phase 6/8) load a real trained model from LocalModelRegistry. With
+# neither reachable in this test environment and no retry_policy set on
+# any workflow.execute_activity() call (Temporal retries indefinitely by
+# default), a real activity here would hang both locally and in CI.
 #
 # ENG-2c's own documented DoD for this workflow is "runs end-to-end... with
-# stubbed layer calls" -- this test exists to verify orchestration (sequencing,
-# parallel execution, signal/human-review-wait), not confidence_calibration's
-# real business logic, which has its own coverage in
-# tests/unit/services/calibration/. Restoring a stub here, registered under
-# the same activity name so the workflow's execute_activity(...) call routes
-# to it, is the correct fix -- not adding a retry_policy (that would still
-# eventually fail against a real DB error, just faster; the point is this
-# workflow test shouldn't touch a database at all).
-# Mocked return type is ConfidenceCalibrationOutput, not the old
-# ActivityResult, since the ENG-2c-wiring Phase 7 commit gave the real
-# confidence_calibration_activity a (input, ml_output) signature and that
-# return type -- see the FeatureAssemblyOutput mock below for why this
-# must track the real function's annotation.
-@activity.defn(name="confidence_calibration_activity")
-async def mocked_confidence_calibration_activity(
-    input: AnalysisPipelineInput,
-) -> ConfidenceCalibrationOutput:
-    return ConfidenceCalibrationOutput(calibrated_scores=[])
-
-
-# Same rationale as above, now also true of data_quality_gate_activity since
-# the ENG-2c-wiring Phase 1 commit (see services/ingestion/repository.py):
-# it opens a real DB session and parses tenant_id/building_id as UUIDs, so
-# this workflow-orchestration test must not depend on either a live database
-# or on its fixture strings being valid UUIDs.
+# stubbed layer calls" -- this test exists to verify orchestration
+# (sequencing, parallel execution, DTO threading, signal/human-review-wait),
+# not any individual layer's business logic, which has its own coverage
+# under tests/unit/services/. Every mock below is registered under its
+# real activity's name (so workflow.execute_activity(...) routes to it) and
+# matches that real activity's CURRENT (input, ...) signature and return
+# type exactly -- the ENG-2c-wiring Phase 9 commit rewired
+# analysis_pipeline.py itself to thread every activity's real output into
+# the next, so these signatures must track workflow.py's actual call sites.
 @activity.defn(name="data_quality_gate_activity")
 async def mocked_data_quality_gate_activity(
     input: AnalysisPipelineInput,
@@ -69,10 +51,6 @@ async def mocked_data_quality_gate_activity(
     return DataQualityGateOutput(overall_status="pass", pass_count=1)
 
 
-# Same rationale, now also true of rule_engine_activity and
-# stl_detection_activity since the ENG-2c-wiring Phase 4 commit made both
-# open real DB sessions and parse tenant_id/building_id as UUIDs (see
-# services/rules_engine/repository.py, services/stl_detection/repository.py).
 @activity.defn(name="rule_engine_activity")
 async def mocked_rule_engine_activity(input: AnalysisPipelineInput) -> RuleEngineOutput:
     return RuleEngineOutput(findings=[], rule_fires=[])
@@ -83,40 +61,36 @@ async def mocked_stl_detection_activity(input: AnalysisPipelineInput) -> STLOutp
     return STLOutput(residuals=[])
 
 
-# Same rationale, now also true of feature_assembly_activity since the
-# ENG-2c-wiring Phase 5 commit gave it a real (input, rule_output,
-# stl_output) signature, a real DB session, and a FeatureAssemblyOutput
-# return type -- the workflow itself still calls it with a single
-# AnalysisPipelineInput arg until Phase 9 rewires the workflow's call
-# sites to thread every activity's output into the next, so this mock
-# keeps the OLD single-arg contract the still-unmodified workflow
-# actually invokes. The return type MUST still be FeatureAssemblyOutput,
-# not the old ActivityResult -- workflow.execute_activity(...) resolves
-# its expected return type from the real (unmocked) feature_assembly_activity
-# function reference workflow.py imports directly, independent of which
-# activity implementation the worker actually routes to by name; a mismatch
-# here fails payload decoding on the workflow side (learned the hard way:
-# an ActivityResult-returning mock crashed with "Failed decoding arguments").
 @activity.defn(name="feature_assembly_activity")
-async def mocked_feature_assembly_activity(input: AnalysisPipelineInput) -> FeatureAssemblyOutput:
+async def mocked_feature_assembly_activity(
+    input: AnalysisPipelineInput,
+    rule_output: RuleEngineOutput,
+    stl_output: STLOutput,
+) -> FeatureAssemblyOutput:
     return FeatureAssemblyOutput(features=[])
 
 
-# Same rationale, now also true of ml_ensemble_activity since the
-# ENG-2c-wiring Phase 6 commit gave it a real (input, feature_output)
-# signature and an MLEnsembleOutput return type.
 @activity.defn(name="ml_ensemble_activity")
-async def mocked_ml_ensemble_activity(input: AnalysisPipelineInput) -> MLEnsembleOutput:
+async def mocked_ml_ensemble_activity(
+    input: AnalysisPipelineInput,
+    feature_output: FeatureAssemblyOutput,
+) -> MLEnsembleOutput:
     return MLEnsembleOutput(scores=[])
 
 
-# Same rationale, now also true of root_cause_attribution_activity since the
-# ENG-2c-wiring Phase 8 commit gave it a real
-# (input, feature_output, calibration_output) signature and an
-# ExplainabilityOutput return type.
+@activity.defn(name="confidence_calibration_activity")
+async def mocked_confidence_calibration_activity(
+    input: AnalysisPipelineInput,
+    ml_output: MLEnsembleOutput,
+) -> ConfidenceCalibrationOutput:
+    return ConfidenceCalibrationOutput(calibrated_scores=[])
+
+
 @activity.defn(name="root_cause_attribution_activity")
 async def mocked_root_cause_attribution_activity(
     input: AnalysisPipelineInput,
+    feature_output: FeatureAssemblyOutput,
+    calibration_output: ConfidenceCalibrationOutput,
 ) -> ExplainabilityOutput:
     return ExplainabilityOutput(persisted_finding_ids=[], bundles=[])
 
