@@ -25,6 +25,17 @@ and root_cause_attribution_activity correctly persists nothing beyond the
 domain-rule finding rule_engine_activity already inserted -- this is the
 documented graceful-degradation path (see analysis_stubs.py), not a test
 gap.
+
+CI NOTE: marked `e2e`, not `integration`. The `test-integration` CI job
+(.github/workflows/ci.yml) runs `pytest tests/integration -m integration`
+with no database service -- every other file under tests/integration/
+uses in-memory/local repos and never touches a real DB. Only the
+`test-security` job provisions a live TimescaleDB (migrations + role
+grants). This test needs the same infrastructure test-security has but
+isn't part of that job's suite; until a DB-backed CI job is wired up for
+`-m e2e` (deferred; see ENG-6 follow-up), this test is real, passes
+locally against a live DB, and is excluded from `-m integration` so it
+does not fail CI against a database that was never provisioned for it.
 """
 
 from __future__ import annotations
@@ -50,7 +61,7 @@ from orchestration.temporal.dto import AnalysisPipelineInput
 from shared.auth.tenant_context import tenant_scope
 from shared.database import get_session_factory
 
-pytestmark = pytest.mark.integration
+pytestmark = pytest.mark.e2e
 
 
 @pytest_asyncio.fixture()
