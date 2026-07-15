@@ -15,47 +15,86 @@ from temporalio import activity
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from orchestration.temporal.activities.analysis_stubs import (
-    data_quality_gate_activity,
-    feature_assembly_activity,
-    ml_ensemble_activity,
-    root_cause_attribution_activity,
-    rule_engine_activity,
-    stl_detection_activity,
-)
 from orchestration.temporal.dto import (
-    ActivityResult,
     AnalysisPipelineInput,
+    ConfidenceCalibrationOutput,
+    DataQualityGateOutput,
+    ExplainabilityOutput,
+    FeatureAssemblyOutput,
     HumanReviewSignal,
+    MLEnsembleOutput,
+    RuleEngineOutput,
+    STLOutput,
 )
 from orchestration.temporal.workflows.analysis_pipeline import AnalysisPipelineWorkflow
 
 
-# CONFIRMED BUG (pre-ENG-4 integration audit): see the identical fix and
-# full explanation in test_analysis_pipeline.py -- confidence_calibration_activity
-# stopped being a stub once ENG-3f merged, opens a real DB session, has no
-# retry_policy on its workflow.execute_activity() call (Temporal retries
-# indefinitely by default), and this test file was never updated after that
-# merge. Hung both locally and in CI (test-unit ran 50+ minutes) until fixed.
+# CONFIRMED BUG (pre-ENG-4 integration audit), still the governing reason
+# every activity below is mocked rather than imported real -- see the full
+# explanation in test_analysis_pipeline.py. Every mock is registered under
+# its real activity's name and matches that real activity's CURRENT
+# (input, ...) signature and return type exactly, since the ENG-2c-wiring
+# Phase 9 commit rewired analysis_pipeline.py to thread every activity's
+# real output into the next.
+@activity.defn(name="data_quality_gate_activity")
+async def mocked_data_quality_gate_activity(
+    input: AnalysisPipelineInput,
+) -> DataQualityGateOutput:
+    return DataQualityGateOutput(overall_status="pass", pass_count=1)
+
+
+@activity.defn(name="rule_engine_activity")
+async def mocked_rule_engine_activity(input: AnalysisPipelineInput) -> RuleEngineOutput:
+    return RuleEngineOutput(findings=[], rule_fires=[])
+
+
+@activity.defn(name="stl_detection_activity")
+async def mocked_stl_detection_activity(input: AnalysisPipelineInput) -> STLOutput:
+    return STLOutput(residuals=[])
+
+
+@activity.defn(name="feature_assembly_activity")
+async def mocked_feature_assembly_activity(
+    input: AnalysisPipelineInput,
+    rule_output: RuleEngineOutput,
+    stl_output: STLOutput,
+) -> FeatureAssemblyOutput:
+    return FeatureAssemblyOutput(features=[])
+
+
+@activity.defn(name="ml_ensemble_activity")
+async def mocked_ml_ensemble_activity(
+    input: AnalysisPipelineInput,
+    feature_output: FeatureAssemblyOutput,
+) -> MLEnsembleOutput:
+    return MLEnsembleOutput(scores=[])
+
+
 @activity.defn(name="confidence_calibration_activity")
 async def mocked_confidence_calibration_activity(
     input: AnalysisPipelineInput,
-) -> ActivityResult:
-    return ActivityResult(
-        step_name="confidence_calibration",
-        status="completed",
-        detail=f"Mocked calibration for tenant={input.tenant_id}",
-    )
+    ml_output: MLEnsembleOutput,
+) -> ConfidenceCalibrationOutput:
+    return ConfidenceCalibrationOutput(calibrated_scores=[])
+
+
+@activity.defn(name="root_cause_attribution_activity")
+async def mocked_root_cause_attribution_activity(
+    input: AnalysisPipelineInput,
+    feature_output: FeatureAssemblyOutput,
+    calibration_output: ConfidenceCalibrationOutput,
+) -> ExplainabilityOutput:
+    return ExplainabilityOutput(persisted_finding_ids=[], bundles=[])
 
 
 ALL_ACTIVITIES = [
-    data_quality_gate_activity,
-    rule_engine_activity,
-    stl_detection_activity,
-    feature_assembly_activity,
-    ml_ensemble_activity,
+    mocked_data_quality_gate_activity,
+    mocked_rule_engine_activity,
+    mocked_stl_detection_activity,
+    mocked_feature_assembly_activity,
+    mocked_ml_ensemble_activity,
     mocked_confidence_calibration_activity,
-    root_cause_attribution_activity,
+    mocked_root_cause_attribution_activity,
 ]
 
 PIPELINE_INPUT = AnalysisPipelineInput(

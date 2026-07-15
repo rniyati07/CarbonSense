@@ -1,6 +1,11 @@
+import datetime
 import json
 from collections.abc import Sequence
 from typing import Any, Protocol
+from uuid import UUID
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import Finding
 
@@ -87,3 +92,107 @@ class InMemoryRuleRegistryRepository:
 
     def get_registered_version(self, rule_id: str) -> int | None:
         return self.versions.get(rule_id)
+
+
+# ---------------------------------------------------------------------------
+# ENG-2c-wiring addition: fetch the inputs process_readings() needs.
+#
+# DomainRuleEngineService.process_readings(tenant_id, building_id,
+# building_context, readings, circuit_types) has always required its caller
+# to supply readings/building_context/circuit_types directly -- nothing in
+# this package could fetch them from the database. This is that missing
+# piece, following the same async-SQLAlchemy-session, tenant-scoped-caller
+# pattern already established by services/calibration/repository.py and
+# services/drift_detection/repository.py (NOT the older sync get_connection()
+# pattern used by FindingRepository/RuleRegistryRepository above, which
+# predates that convention). The caller is expected to have already entered
+# shared.auth.tenant_context.tenant_scope(session, tenant_id), exactly as
+# the confidence_calibration and drift_detection activities already do.
+# ---------------------------------------------------------------------------
+
+
+class RulesEngineReadingsRepository:
+    """Fetches normalized_readings, building context, and circuit types
+    for a (tenant_id, building_id, window) needed by process_readings()."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_readings(
+        self,
+        tenant_id: UUID,
+        building_id: UUID,
+        window_start: datetime.datetime,
+        window_end: datetime.datetime,
+    ) -> list[dict[str, Any]]:
+        """Return pass/degraded readings as plain dicts.
+
+        process_readings() accepts dict or attribute-style readings (see
+        DictToObject in service.py) -- dicts avoid depending on
+        services.ingestion.models.NormalizedReading's stricter required
+        fields (source_system, ingestion_timestamp, normalization_version)
+        that aren't relevant to rule evaluation and aren't selected here.
+        """
+        stmt = text(
+            """
+            SELECT nr.circuit_id, nr.ts, nr.kwh, nr.data_quality_status
+            FROM normalized_readings nr
+            JOIN submeter_circuits sc ON nr.circuit_id = sc.circuit_id
+            WHERE sc.building_id = :building_id
+              AND nr.ts >= :window_start
+              AND nr.ts <= :window_end
+              AND nr.data_quality_status IN ('pass', 'degraded')
+            ORDER BY nr.ts
+            """
+        )
+        result = await self._session.execute(
+            stmt,
+            {
+                "building_id": str(building_id),
+                "window_start": window_start,
+                "window_end": window_end,
+            },
+        )
+        return [
+            {
+                "circuit_id": row.circuit_id,
+                "ts": row.ts,
+                "kwh": row.kwh,
+                "data_quality_status": row.data_quality_status,
+            }
+            for row in result.fetchall()
+        ]
+
+    async def get_circuit_types(self, building_id: UUID) -> dict[UUID, str]:
+        stmt = text(
+            "SELECT circuit_id, circuit_type FROM submeter_circuits "
+            "WHERE building_id = :building_id"
+        )
+        result = await self._session.execute(stmt, {"building_id": str(building_id)})
+        return {row.circuit_id: row.circuit_type for row in result.fetchall()}
+
+    async def get_building_context(self, building_id: UUID) -> dict[str, Any]:
+        """Return the declared_unoccupied_baseline/occupancy_schedule pair the
+        shipped rule YAMLs (hvac_after_hours_v3, scheduling_violation_v1,
+        weekend_vampire_load_v1) reference as `building.declared_unoccupied_baseline`
+        / `building.occupancy_schedule` -- exact attribute names confirmed
+        against those YAML files, not guessed.
+        """
+        stmt = text(
+            """
+            SELECT building_type, climate_zone, declared_unoccupied_baseline,
+                   declared_occupancy_schedule
+            FROM buildings
+            WHERE building_id = :building_id
+            """
+        )
+        result = await self._session.execute(stmt, {"building_id": str(building_id)})
+        row = result.fetchone()
+        if row is None:
+            return {"declared_unoccupied_baseline": 0.0, "occupancy_schedule": None}
+        return {
+            "building_type": row.building_type,
+            "climate_zone": row.climate_zone,
+            "declared_unoccupied_baseline": row.declared_unoccupied_baseline or 0.0,
+            "occupancy_schedule": row.declared_occupancy_schedule,
+        }

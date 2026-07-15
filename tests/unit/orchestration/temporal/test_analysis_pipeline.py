@@ -12,60 +12,97 @@ from temporalio.client import WorkflowFailureError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from orchestration.temporal.activities.analysis_stubs import (
-    data_quality_gate_activity,
-    feature_assembly_activity,
-    ml_ensemble_activity,
-    root_cause_attribution_activity,
-    rule_engine_activity,
-    stl_detection_activity,
-)
 from orchestration.temporal.dto import (
-    ActivityResult,
     AnalysisPipelineInput,
+    ConfidenceCalibrationOutput,
+    DataQualityGateOutput,
+    ExplainabilityOutput,
+    FeatureAssemblyOutput,
     HumanReviewSignal,
+    MLEnsembleOutput,
+    RuleEngineOutput,
+    STLOutput,
 )
 from orchestration.temporal.workflows.analysis_pipeline import AnalysisPipelineWorkflow
 
 
-# CONFIRMED BUG (pre-ENG-4 integration audit): confidence_calibration_activity
-# in analysis_stubs.py stopped being a stub once ENG-3f (Confidence Calibration)
-# was integrated -- it now opens a real SQLAlchemy session against a live
-# database (see analysis_stubs.py). This test file predates that merge and
-# was never updated: it imported the real activity into ALL_ACTIVITIES, and
-# the workflow calls it with no retry_policy (Temporal's default retries
-# indefinitely). With no database reachable in this test environment, every
-# attempt fails and the workflow retries forever -- this hung both locally
-# and in CI (test-unit ran 50+ minutes with no completion) until this fix.
+# CONFIRMED BUG (pre-ENG-4 integration audit), still the governing reason
+# every activity below is mocked rather than imported real: several of
+# these activities open a real SQLAlchemy session against a live database
+# or (Phase 6/8) load a real trained model from LocalModelRegistry. With
+# neither reachable in this test environment and no retry_policy set on
+# any workflow.execute_activity() call (Temporal retries indefinitely by
+# default), a real activity here would hang both locally and in CI.
 #
 # ENG-2c's own documented DoD for this workflow is "runs end-to-end... with
-# stubbed layer calls" -- this test exists to verify orchestration (sequencing,
-# parallel execution, signal/human-review-wait), not confidence_calibration's
-# real business logic, which has its own coverage in
-# tests/unit/services/calibration/. Restoring a stub here, registered under
-# the same activity name so the workflow's execute_activity(...) call routes
-# to it, is the correct fix -- not adding a retry_policy (that would still
-# eventually fail against a real DB error, just faster; the point is this
-# workflow test shouldn't touch a database at all).
+# stubbed layer calls" -- this test exists to verify orchestration
+# (sequencing, parallel execution, DTO threading, signal/human-review-wait),
+# not any individual layer's business logic, which has its own coverage
+# under tests/unit/services/. Every mock below is registered under its
+# real activity's name (so workflow.execute_activity(...) routes to it) and
+# matches that real activity's CURRENT (input, ...) signature and return
+# type exactly -- the ENG-2c-wiring Phase 9 commit rewired
+# analysis_pipeline.py itself to thread every activity's real output into
+# the next, so these signatures must track workflow.py's actual call sites.
+@activity.defn(name="data_quality_gate_activity")
+async def mocked_data_quality_gate_activity(
+    input: AnalysisPipelineInput,
+) -> DataQualityGateOutput:
+    return DataQualityGateOutput(overall_status="pass", pass_count=1)
+
+
+@activity.defn(name="rule_engine_activity")
+async def mocked_rule_engine_activity(input: AnalysisPipelineInput) -> RuleEngineOutput:
+    return RuleEngineOutput(findings=[], rule_fires=[])
+
+
+@activity.defn(name="stl_detection_activity")
+async def mocked_stl_detection_activity(input: AnalysisPipelineInput) -> STLOutput:
+    return STLOutput(residuals=[])
+
+
+@activity.defn(name="feature_assembly_activity")
+async def mocked_feature_assembly_activity(
+    input: AnalysisPipelineInput,
+    rule_output: RuleEngineOutput,
+    stl_output: STLOutput,
+) -> FeatureAssemblyOutput:
+    return FeatureAssemblyOutput(features=[])
+
+
+@activity.defn(name="ml_ensemble_activity")
+async def mocked_ml_ensemble_activity(
+    input: AnalysisPipelineInput,
+    feature_output: FeatureAssemblyOutput,
+) -> MLEnsembleOutput:
+    return MLEnsembleOutput(scores=[])
+
+
 @activity.defn(name="confidence_calibration_activity")
 async def mocked_confidence_calibration_activity(
     input: AnalysisPipelineInput,
-) -> ActivityResult:
-    return ActivityResult(
-        step_name="confidence_calibration",
-        status="completed",
-        detail=f"Mocked calibration for tenant={input.tenant_id}",
-    )
+    ml_output: MLEnsembleOutput,
+) -> ConfidenceCalibrationOutput:
+    return ConfidenceCalibrationOutput(calibrated_scores=[])
+
+
+@activity.defn(name="root_cause_attribution_activity")
+async def mocked_root_cause_attribution_activity(
+    input: AnalysisPipelineInput,
+    feature_output: FeatureAssemblyOutput,
+    calibration_output: ConfidenceCalibrationOutput,
+) -> ExplainabilityOutput:
+    return ExplainabilityOutput(persisted_finding_ids=[], bundles=[])
 
 
 ALL_ACTIVITIES = [
-    data_quality_gate_activity,
-    rule_engine_activity,
-    stl_detection_activity,
-    feature_assembly_activity,
-    ml_ensemble_activity,
+    mocked_data_quality_gate_activity,
+    mocked_rule_engine_activity,
+    mocked_stl_detection_activity,
+    mocked_feature_assembly_activity,
+    mocked_ml_ensemble_activity,
     mocked_confidence_calibration_activity,
-    root_cause_attribution_activity,
+    mocked_root_cause_attribution_activity,
 ]
 
 
