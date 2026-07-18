@@ -16,6 +16,7 @@ with workflow.unsafe.imports_passed_through():
         rule_engine_activity,
         stl_detection_activity,
     )
+    from orchestration.temporal.activities.optimization import optimization_activity
     from orchestration.temporal.dto import (
         AnalysisPipelineInput,
         AnalysisPipelineStatus,
@@ -34,6 +35,7 @@ class AnalysisPipelineWorkflow:
         -> ML Ensemble
         -> Confidence Calibration
         -> Root Cause Attribution
+        -> Optimization Engine (ENG-4, TRD v2.0 §4's Temporal-callable mode)
         -> Human Review Wait  [Temporal Signal]
         -> Complete
     """
@@ -110,12 +112,24 @@ class AnalysisPipelineWorkflow:
 
         # Layer 7: Root Cause Attribution
         self._current_step = "root_cause_attribution"
-        await workflow.execute_activity(
+        explainability_output = await workflow.execute_activity(
             root_cause_attribution_activity,
             args=[input, feature_output, calibration_output],
             start_to_close_timeout=timedelta(minutes=5),
         )
         self._steps_completed.append("root_cause_attribution")
+
+        # Layer 8: Optimization Engine (ENG-4) -- TRD v2.0 §4 specifies the
+        # Temporal-callable mode runs "as a Temporal workflow step within
+        # the main analysis pipeline", after Root-Cause Attribution since
+        # ENG-4c requires every scenario to cite a real, persisted finding_id.
+        self._current_step = "optimization"
+        await workflow.execute_activity(
+            optimization_activity,
+            args=[input, explainability_output],
+            start_to_close_timeout=timedelta(minutes=5),
+        )
+        self._steps_completed.append("optimization")
 
         # Human Review Wait (signal-based, NOT sleep/polling)
         self._current_step = "waiting_for_human_review"
