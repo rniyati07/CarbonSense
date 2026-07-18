@@ -20,6 +20,7 @@ from orchestration.temporal.dto import (
     FeatureAssemblyOutput,
     HumanReviewSignal,
     MLEnsembleOutput,
+    OptimizationOutput,
     RuleEngineOutput,
     STLOutput,
 )
@@ -95,6 +96,14 @@ async def mocked_root_cause_attribution_activity(
     return ExplainabilityOutput(persisted_finding_ids=[], bundles=[])
 
 
+@activity.defn(name="optimization_activity")
+async def mocked_optimization_activity(
+    input: AnalysisPipelineInput,
+    explainability_output: ExplainabilityOutput,
+) -> OptimizationOutput:
+    return OptimizationOutput(scenarios=[], unavailable=[])
+
+
 ALL_ACTIVITIES = [
     mocked_data_quality_gate_activity,
     mocked_rule_engine_activity,
@@ -103,6 +112,7 @@ ALL_ACTIVITIES = [
     mocked_ml_ensemble_activity,
     mocked_confidence_calibration_activity,
     mocked_root_cause_attribution_activity,
+    mocked_optimization_activity,
 ]
 
 
@@ -141,6 +151,7 @@ async def test_pipeline_end_to_end_with_signal() -> None:
 
         assert status.is_waiting_for_human_review is True
         assert "root_cause_attribution" in status.steps_completed
+        assert "optimization" in status.steps_completed
 
         # Send the human review signal
         await handle.signal(
