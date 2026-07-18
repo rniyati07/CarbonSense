@@ -23,6 +23,7 @@ from orchestration.temporal.dto import (
     FeatureAssemblyOutput,
     HumanReviewSignal,
     MLEnsembleOutput,
+    OptimizationOutput,
     RuleEngineOutput,
     STLOutput,
 )
@@ -87,6 +88,14 @@ async def mocked_root_cause_attribution_activity(
     return ExplainabilityOutput(persisted_finding_ids=[], bundles=[])
 
 
+@activity.defn(name="optimization_activity")
+async def mocked_optimization_activity(
+    input: AnalysisPipelineInput,
+    explainability_output: ExplainabilityOutput,
+) -> OptimizationOutput:
+    return OptimizationOutput(scenarios=[], unavailable=[])
+
+
 ALL_ACTIVITIES = [
     mocked_data_quality_gate_activity,
     mocked_rule_engine_activity,
@@ -95,6 +104,7 @@ ALL_ACTIVITIES = [
     mocked_ml_ensemble_activity,
     mocked_confidence_calibration_activity,
     mocked_root_cause_attribution_activity,
+    mocked_optimization_activity,
 ]
 
 PIPELINE_INPUT = AnalysisPipelineInput(
@@ -131,8 +141,8 @@ async def test_query_returns_status_mid_execution() -> None:
                 break
             await asyncio.sleep(0.1)
 
-        # Query should reflect all 7 completed steps
-        assert len(status.steps_completed) == 7
+        # Query should reflect all 8 completed steps
+        assert len(status.steps_completed) == 8
         assert status.current_step == "waiting_for_human_review"
         assert status.is_waiting_for_human_review is True
 

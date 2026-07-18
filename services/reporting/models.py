@@ -3,7 +3,11 @@
 These Pydantic models define:
 - The input payload to the Reporting Service (ReportingRequest)
 - The LLM output schema (ActionPlan, ActionItem)
-- The Optimization Scenario contract mirror (OptimizationScenario)
+
+OptimizationScenario used to be hand-mirrored here, predating ENG-4's real
+implementation. It is now owned by services.optimization.models (the
+service that actually produces it) and re-exported here for backward
+compatibility with this module's existing public API.
 
 The ActionPlan is the single source of truth — the PDF is a template over this
 object, not an independently maintained artifact (TRD v2.0 §5.4).
@@ -17,34 +21,11 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from services.explainability.models import ExplainabilityBundle
+from services.optimization.models import OptimizationScenario  # noqa: F401 (re-exported)
 
 # ---------------------------------------------------------------------------
 # Input: what the Reporting Service receives
 # ---------------------------------------------------------------------------
-
-
-class OptimizationScenario(BaseModel):
-    """Mirror of the Optimization Engine output contract (TRD v2.0 §4)."""
-
-    scenario_id: UUID
-    scenario_model: str = Field(..., description="e.g. load_shift_v1")
-    model_version: int = Field(..., ge=1)
-    building_id: UUID
-    justifying_finding_ids: list[UUID] = Field(
-        ..., min_length=1, description="Finding IDs that justify this scenario"
-    )
-    baseline_kwh: float = Field(..., ge=0)
-    optimized_kwh: float = Field(..., ge=0)
-    baseline_emissions_kg_co2: float = Field(..., ge=0)
-    optimized_emissions_kg_co2: float = Field(..., ge=0)
-    pct_reduction: float = Field(..., ge=0, le=100)
-    estimated_annual_savings_inr: float = Field(..., ge=0)
-    payback_months: float = Field(..., ge=0)
-    confidence_band: dict[str, float] = Field(
-        default_factory=dict,
-        description="{'lower_pct': ..., 'upper_pct': ...}",
-    )
-    bounds_check: Literal["passed", "failed"] = "passed"
 
 
 class FindingWithBundle(BaseModel):

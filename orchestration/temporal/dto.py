@@ -8,6 +8,7 @@ from models.feature_store.feature_set_v1 import FeatureSetV1
 from services.calibration.dto import CalibratedScore
 from services.explainability.models import ExplainabilityBundle
 from services.ml_ensemble.models import EnsembleScoreRecord
+from services.optimization.models import OptimizationScenario, ScenarioUnavailable
 from services.rules_engine.models import Finding
 from services.stl_detection.models import STLResidualResult
 
@@ -114,6 +115,24 @@ class ExplainabilityOutput:
 
     persisted_finding_ids: list[UUID] = field(default_factory=list)
     bundles: list[ExplainabilityBundle] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class OptimizationOutput:
+    """ENG-4: result of running every registered scenario model
+    (services.optimization.registry) for this building.
+
+    scenarios/unavailable are two separately-typed lists, not one
+    list[OptimizationScenario | ScenarioUnavailable] -- Temporal's data
+    converter reconstructs a dataclass field's declared type on
+    deserialization; a Union of two Pydantic models has no discriminator
+    for it to pick the right one from, so the union is split into two
+    unambiguous lists instead (every OptimizationScenario present has
+    already passed ENG-4d's bounds check).
+    """
+
+    scenarios: list[OptimizationScenario] = field(default_factory=list)
+    unavailable: list[ScenarioUnavailable] = field(default_factory=list)
 
 
 @dataclass
