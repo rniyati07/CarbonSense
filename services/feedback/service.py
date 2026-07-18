@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import datetime
-import json
 import logging
 import uuid
-from collections.abc import Callable
-from typing import Any
 
+from orchestration.events.kafka.producer import EventPublisher
 from orchestration.events.kafka.schemas.retraining_eligible import RetrainingEligibleEvent
+from services.feedback.repository import FeedbackRepository
+from shared.config.kafka import KafkaSettings
 
 logger = logging.getLogger(__name__)
 
@@ -18,25 +18,47 @@ logger = logging.getLogger(__name__)
 RETRAINING_THRESHOLD = 5
 
 
+class InvalidFeedbackActionError(ValueError):
+    pass
+
+
+class FindingNotFoundError(ValueError):
+    pass
+
+
+class MissingExplainabilityBundleError(ValueError):
+    pass
+
+
 class FeedbackService:
     """Manages recording feedback labels (confirm/dismiss) on findings.
 
-    Enforces that the target finding has an explainability bundle before writing,
-    maintains a per-building feedback counter, and fires retraining-eligibility events
-    exactly at the threshold crossing.
+    Enforces that the target finding has an explainability bundle before
+    writing, maintains a per-building feedback counter, and fires
+    retraining-eligibility events exactly at the threshold crossing.
+
+    Async + repository-injected, matching every other post-ENG-2c service
+    (CalibrationService, OptimizationService, DomainRuleEngineService) --
+    the caller is responsible for opening the session inside
+    shared.auth.tenant_context.tenant_scope(session, tenant_id) and
+    committing afterward, exactly as confidence_calibration_activity and
+    optimization_activity already do. Replaces the previous sync,
+    dual-connection-type implementation (raw DB-API cursor or sync
+    SQLAlchemy Connection, manually issuing `SET LOCAL
+    app.current_tenant_id`), which predated that convention.
     """
 
     def __init__(
         self,
-        get_connection: Callable[[], Any],
-        event_publisher: Any = None,
-        kafka_settings: Any = None,
+        repository: FeedbackRepository,
+        event_publisher: EventPublisher | None = None,
+        kafka_settings: KafkaSettings | None = None,
     ) -> None:
-        self.get_connection = get_connection
-        self.event_publisher = event_publisher
-        self.kafka_settings = kafka_settings
+        self._repository = repository
+        self._event_publisher = event_publisher
+        self._kafka_settings = kafka_settings or KafkaSettings()
 
-    def record_feedback(
+    async def record_feedback(
         self,
         tenant_id: uuid.UUID,
         finding_id: uuid.UUID,
@@ -45,169 +67,64 @@ class FeedbackService:
     ) -> None:
         """Records confirm/dismiss feedback for a finding.
 
-        Ensures the finding is valid, has an explainability bundle, inserts
-        the feedback label, updates the finding status, and publishes a
-        retraining-eligible event if the threshold is reached.
+        Raises:
+            InvalidFeedbackActionError: action is not "confirmed"/"dismissed".
+            FindingNotFoundError: no finding with this ID is visible to the
+                caller's tenant (RLS-enforced by the caller's tenant_scope()).
+            MissingExplainabilityBundleError: the finding has no bundle --
+                per the same TRD v2.0 §3.7 invariant BundleAssembler enforces
+                at write time, feedback cannot be recorded against a finding
+                that was never fully assembled.
         """
         if action not in ("confirmed", "dismissed"):
-            raise ValueError(f"Invalid feedback action: {action}")
+            raise InvalidFeedbackActionError(f"Invalid feedback action: {action}")
 
-        conn = self.get_connection()
-        try:
-            # Detect connection type
-            is_sqlalchemy = hasattr(conn, "execute") and not hasattr(conn, "cursor")
-
-            if is_sqlalchemy:
-                from sqlalchemy import text
-
-                # Set RLS tenant context
-                conn.execute(
-                    text("SET LOCAL app.current_tenant_id = :tid"),
-                    {"tid": str(tenant_id)},
-                )
-
-                # Fetch findings row to verify is_eligible
-                res = conn.execute(
-                    text(
-                        "SELECT building_id, explainability_bundle "
-                        "FROM findings "
-                        "WHERE finding_id = :fid"
-                    ),
-                    {"fid": str(finding_id)},
-                )
-                row = res.fetchone()
-            else:
-                cursor = conn.cursor()
-                cursor.execute("SET LOCAL app.current_tenant_id = %s", (str(tenant_id),))
-                cursor.execute(
-                    "SELECT building_id, explainability_bundle FROM findings WHERE finding_id = %s",
-                    (str(finding_id),),
-                )
-                row = cursor.fetchone()
-
-            if not row:
-                raise ValueError(
-                    f"Finding with ID {finding_id} was not found or is not visible to this tenant."
-                )
-
-            building_id = row[0]
-            explainability_bundle_raw = row[1]
-
-            # In psycopg2/SQLAlchemy, JSONB may come back as a dict already
-            # or as a raw JSON string -- normalize either way:
-            if isinstance(explainability_bundle_raw, str):
-                try:
-                    explainability_bundle = json.loads(explainability_bundle_raw)
-                except json.JSONDecodeError:
-                    explainability_bundle = None
-            else:
-                explainability_bundle = explainability_bundle_raw
-
-            is_valid_bundle = (
-                explainability_bundle is not None
-                and isinstance(explainability_bundle, dict)
-                and len(explainability_bundle) > 0
+        finding = await self._repository.get_finding_for_feedback(finding_id)
+        if finding is None:
+            raise FindingNotFoundError(
+                f"Finding with ID {finding_id} was not found or is not visible to this tenant."
             )
 
-            if not is_valid_bundle:
-                raise ValueError(
-                    f"Cannot write feedback for finding {finding_id} because it "
-                    "has no explainability bundle."
-                )
-
-            # Insert into feedback_labels & update finding status
-            feedback_id = uuid.uuid4()
-            now = datetime.datetime.now(datetime.UTC)
-
-            if is_sqlalchemy:
-                conn.execute(
-                    text(
-                        "INSERT INTO feedback_labels "
-                        "(feedback_id, tenant_id, finding_id, action, actor, created_at) "
-                        "VALUES (:fid, :tid, :finding_id, :action, :actor, :created_at)"
-                    ),
-                    {
-                        "fid": str(feedback_id),
-                        "tid": str(tenant_id),
-                        "finding_id": str(finding_id),
-                        "action": action,
-                        "actor": actor,
-                        "created_at": now,
-                    },
-                )
-                conn.execute(
-                    text("UPDATE findings SET status = :status WHERE finding_id = :fid"),
-                    {"status": action, "fid": str(finding_id)},
-                )
-
-                # Fetch count of feedback labels for this building
-                count_res = conn.execute(
-                    text(
-                        "SELECT COUNT(*) FROM feedback_labels fl "
-                        "JOIN findings f ON fl.finding_id = f.finding_id "
-                        "WHERE f.building_id = :bid AND fl.tenant_id = :tid"
-                    ),
-                    {"bid": str(building_id), "tid": str(tenant_id)},
-                )
-                feedback_count = count_res.scalar()
-            else:
-                cursor.execute(
-                    "INSERT INTO feedback_labels "
-                    "(feedback_id, tenant_id, finding_id, action, actor, created_at) "
-                    "VALUES (%s, %s, %s, %s, %s, %s)",
-                    (
-                        str(feedback_id),
-                        str(tenant_id),
-                        str(finding_id),
-                        action,
-                        actor,
-                        now,
-                    ),
-                )
-                cursor.execute(
-                    "UPDATE findings SET status = %s WHERE finding_id = %s",
-                    (action, str(finding_id)),
-                )
-
-                cursor.execute(
-                    "SELECT COUNT(*) FROM feedback_labels fl "
-                    "JOIN findings f ON fl.finding_id = f.finding_id "
-                    "WHERE f.building_id = %s AND fl.tenant_id = %s",
-                    (str(building_id), str(tenant_id)),
-                )
-                feedback_count = cursor.fetchone()[0]
-
-            logger.info(
-                "Feedback recorded for building %s. Current feedback label count: %s",
-                building_id,
-                feedback_count,
+        is_valid_bundle = (
+            finding.explainability_bundle is not None
+            and isinstance(finding.explainability_bundle, dict)
+            and len(finding.explainability_bundle) > 0
+        )
+        if not is_valid_bundle:
+            raise MissingExplainabilityBundleError(
+                f"Cannot write feedback for finding {finding_id} because it "
+                "has no explainability bundle."
             )
 
-            # Check if event needs to trigger (exactly at threshold)
-            if feedback_count == RETRAINING_THRESHOLD:
-                self._publish_retraining_eligible(
-                    tenant_id=tenant_id,
-                    building_id=building_id,
-                    feedback_count=feedback_count,
-                )
+        feedback_id = uuid.uuid4()
+        now = datetime.datetime.now(datetime.UTC)
 
-            # CONFIRMED BUG (pre-ENG-4 integration audit): this commit was
-            # previously gated on `not is_sqlalchemy`, so a SQLAlchemy
-            # Connection never committed -- the feedback_labels insert, the
-            # findings status update, and the retraining-eligible count were
-            # all silently rolled back on conn.close(). Both connection
-            # types need an explicit commit; SQLAlchemy Connection objects
-            # (outside a `begin()` context) support .commit() same as a raw
-            # DB-API connection.
-            if hasattr(conn, "commit"):
-                conn.commit()
+        await self._repository.save_feedback_label(
+            feedback_id=feedback_id,
+            tenant_id=tenant_id,
+            finding_id=finding_id,
+            action=action,
+            actor=actor,
+            created_at=now,
+        )
+        await self._repository.update_finding_status(finding_id, action)
 
-        except Exception as e:
-            if hasattr(conn, "rollback"):
-                conn.rollback()
-            raise e
-        finally:
-            conn.close()
+        feedback_count = await self._repository.count_feedback_for_building(
+            tenant_id, finding.building_id
+        )
+
+        logger.info(
+            "Feedback recorded for building %s. Current feedback label count: %s",
+            finding.building_id,
+            feedback_count,
+        )
+
+        if feedback_count == RETRAINING_THRESHOLD:
+            self._publish_retraining_eligible(
+                tenant_id=tenant_id,
+                building_id=finding.building_id,
+                feedback_count=feedback_count,
+            )
 
     def _publish_retraining_eligible(
         self,
@@ -216,7 +133,7 @@ class FeedbackService:
         feedback_count: int,
     ) -> None:
         """Publishes the retraining eligible event to the Kafka backbone."""
-        if self.event_publisher is None:
+        if self._event_publisher is None:
             logger.warning(
                 "No event publisher configured, skipping RetrainingEligibleEvent publication."
             )
@@ -232,17 +149,7 @@ class FeedbackService:
             feedback_count=feedback_count,
             retraining_threshold=RETRAINING_THRESHOLD,
         )
-
-        # shared.config.kafka.KafkaSettings.topic_retraining_eligible is the
-        # canonical topic name (added during pre-ENG-4 integration -- this
-        # branch previously probed for an attribute that did not exist
-        # anywhere in shared config, so the fallback literal below was
-        # always what actually got used).
-        topic = "model.retraining.eligible"
-        if self.kafka_settings and hasattr(self.kafka_settings, "topic_retraining_eligible"):
-            topic = self.kafka_settings.topic_retraining_eligible
-
-        self.event_publisher.publish(topic, event)
+        self._event_publisher.publish(self._kafka_settings.topic_retraining_eligible, event)
         logger.info(
             "Published RetrainingEligibleEvent for building %s - count %s",
             building_id,
