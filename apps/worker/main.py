@@ -21,6 +21,7 @@ from orchestration.temporal.activities.ml_ensemble_activities import (
     train_autoencoder_activity,
     train_isolation_forest_activity,
 )
+from orchestration.temporal.activities.optimization import optimization_activity
 from orchestration.temporal.activities.retraining_stub import retraining_activity
 from orchestration.temporal.workflows.analysis_pipeline import AnalysisPipelineWorkflow
 from orchestration.temporal.workflows.drift_detection import DriftDetectionWorkflow
@@ -56,6 +57,7 @@ async def run_worker() -> None:
             ml_ensemble_activity,
             confidence_calibration_activity,
             root_cause_attribution_activity,
+            optimization_activity,
             drift_detection_activity,
             retraining_activity,
             train_isolation_forest_activity,
