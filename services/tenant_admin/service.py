@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.tenant_admin.models import ApiClient, ApiClientIssued, Building, Tenant
 from services.tenant_admin.repository import TenantAdminRepository
 from shared.auth.secrets import generate_client_secret, hash_client_secret
+from shared.auth.tenant_context import tenant_scope
 
 
 class TenantNotFoundError(Exception):
@@ -74,12 +75,17 @@ class TenantAdminService:
 class SandboxProvisioningService:
     """TRD v2.0 §7.4 — provisions an isolated, dedicated-tier tenant seeded
     with synthetic building data, running the identical API surface and
-    service code as production (not a separate mocked API). Owns its own
-    session (not tenant-scoped -- provisioning a tenant necessarily
-    predates that tenant having an RLS context; every synthetic row it
-    inserts explicitly carries the newly-created tenant_id, matching the
-    same "always-filter-explicitly" discipline TenantAdminRepository uses
-    for the RLS-exempt api_clients table).
+    service code as production (not a separate mocked API).
+
+    Only the tenant row itself is written outside a tenant context --
+    `tenants` carries no RLS policy (see migration 0008's docstring), and
+    the tenant_id doesn't exist yet to scope by. Every other table this
+    seeds (`buildings`, `submeter_circuits`, `normalized_readings`) *does*
+    carry a FORCE ROW LEVEL SECURITY policy, so writing to them requires
+    `app.current_tenant_id` to be set first -- an earlier version of this
+    service skipped that and would fail against a real RLS-enforced
+    database with "unrecognized configuration parameter", caught by the
+    tenant-isolation fuzzer's real-Postgres CI job.
     """
 
     def __init__(self, session: AsyncSession, repository: TenantAdminRepository) -> None:
@@ -88,14 +94,15 @@ class SandboxProvisioningService:
 
     async def provision(self, name: str) -> Tenant:
         tenant = await self._repository.create_sandbox_tenant(name)
-        building = await self._repository.create_building(
-            tenant_id=tenant.tenant_id,
-            name="Synthetic Demo Building",
-            building_type="office",
-            timezone="Asia/Kolkata",
-            climate_zone="tropical_wet_dry",
-        )
-        await self._seed_synthetic_readings(tenant.tenant_id, building.building_id)
+        async with tenant_scope(self._session, tenant.tenant_id):
+            building = await self._repository.create_building(
+                tenant_id=tenant.tenant_id,
+                name="Synthetic Demo Building",
+                building_type="office",
+                timezone="Asia/Kolkata",
+                climate_zone="tropical_wet_dry",
+            )
+            await self._seed_synthetic_readings(tenant.tenant_id, building.building_id)
         return tenant
 
     async def _seed_synthetic_readings(self, tenant_id: UUID, building_id: UUID) -> None:
