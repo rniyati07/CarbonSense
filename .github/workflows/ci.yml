@@ -146,10 +146,23 @@ jobs:
             GRANT SELECT, INSERT, UPDATE, DELETE ON building_calendar TO carbonsense_app;
             GRANT SELECT, INSERT ON audit_log TO carbonsense_app;
             GRANT SELECT, INSERT, UPDATE, DELETE ON tenants TO carbonsense_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON api_clients TO carbonsense_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON idempotency_keys TO carbonsense_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON webhook_registrations TO carbonsense_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ingestion_webhooks TO carbonsense_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ingestion_batches TO carbonsense_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON analysis_jobs TO carbonsense_app;
           SQL
 
       - name: Run tenant isolation fuzzer
-        run: pytest tests/security -m security -v --tb=short
+        run: pytest tests/security -m security -v --tb=long -rA | tee /tmp/security-output.log
+
+      - name: Upload test-security output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-test-output
+          path: /tmp/security-output.log
 
   # ── Alembic migration validation ──────────────────────────────────
   migrations:
