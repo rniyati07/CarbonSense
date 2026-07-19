@@ -41,6 +41,8 @@ dependencies = [
     "boto3>=1.34",
     "httpx>=0.27",
     "pydantic-settings>=2.3",
+    "pyjwt>=2.8",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]
@@ -91,6 +93,19 @@ ignore = ["S101"] # allow assert in tests
 
 [tool.ruff.lint.isort]
 known-first-party = ["apps", "services", "shared", "models", "orchestration"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection idiom *is* Depends(...)/Query(...)/etc. in
+# argument defaults -- B008 exists to catch accidental mutable-default
+# footguns, not this well-defined, framework-standard pattern (matches
+# FastAPI's own documented ruff configuration).
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Header",
+    "fastapi.File",
+    "fastapi.Form",
+]
 
 [tool.black]
 line-length = 100

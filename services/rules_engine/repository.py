@@ -196,3 +196,102 @@ class RulesEngineReadingsRepository:
             "declared_unoccupied_baseline": row.declared_unoccupied_baseline or 0.0,
             "occupancy_schedule": row.declared_occupancy_schedule,
         }
+
+
+# ---------------------------------------------------------------------------
+# ENG-5b addition: the Findings API's read path. Nothing before ENG-5
+# needed to SELECT findings back out with their full evidence window and
+# bundle -- every prior consumer (ExplainabilityRepository, the
+# Optimization Engine's get_justifying_findings()) either only writes or
+# only needs a partial projection. This is the first full row->Finding
+# reconstruction, following the same async-SQLAlchemy-session pattern as
+# every other repository in this module.
+# ---------------------------------------------------------------------------
+
+_FINDING_SELECT_COLUMNS = """
+    finding_id, tenant_id, building_id, circuit_id, layer_origin, detected_at,
+    lower(evidence_window) AS window_start, upper(evidence_window) AS window_end,
+    confidence, status, explainability_bundle
+"""
+
+
+def _row_to_finding(row: Any) -> Finding:
+    bundle = row.explainability_bundle
+    if isinstance(bundle, str):
+        bundle = json.loads(bundle)
+    return Finding(
+        finding_id=row.finding_id,
+        tenant_id=row.tenant_id,
+        building_id=row.building_id,
+        circuit_id=row.circuit_id,
+        layer_origin=row.layer_origin,
+        detected_at=row.detected_at,
+        evidence_window_start=row.window_start,
+        evidence_window_end=row.window_end,
+        confidence=row.confidence,
+        status=row.status,
+        explainability_bundle=bundle,
+    )
+
+
+class FindingQueryRepository:
+    """Read path for the Findings API (TRD v2.0 §7.1): list with filters,
+    fetch one. Always tenant_id-filtered explicitly, in addition to
+    whatever the caller's tenant_scope(session, tenant_id) RLS context
+    already enforces -- defense in depth, matching this repository
+    module's existing convention.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def list_findings(
+        self,
+        tenant_id: UUID,
+        building_id: UUID | None = None,
+        status: str | None = None,
+        min_confidence: float | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[Finding]:
+        clauses = ["tenant_id = :tenant_id"]
+        params: dict[str, Any] = {"tenant_id": str(tenant_id), "limit": limit, "offset": offset}
+
+        if building_id is not None:
+            clauses.append("building_id = :building_id")
+            params["building_id"] = str(building_id)
+        if status is not None:
+            clauses.append("status = :status")
+            params["status"] = status
+        if min_confidence is not None:
+            clauses.append("confidence >= :min_confidence")
+            params["min_confidence"] = min_confidence
+
+        # clauses is built only from a fixed whitelist of hardcoded column-name
+        # literals above -- every actual value is bound via `params`, never
+        # interpolated -- so this is not a real SQL-injection vector.
+        stmt = text(
+            f"""
+            SELECT {_FINDING_SELECT_COLUMNS}
+            FROM findings
+            WHERE {" AND ".join(clauses)}
+            ORDER BY detected_at DESC
+            LIMIT :limit OFFSET :offset
+            """  # noqa: S608
+        )
+        result = await self._session.execute(stmt, params)
+        return [_row_to_finding(row) for row in result.fetchall()]
+
+    async def get_finding(self, tenant_id: UUID, finding_id: UUID) -> Finding | None:
+        stmt = text(
+            f"""
+            SELECT {_FINDING_SELECT_COLUMNS}
+            FROM findings
+            WHERE tenant_id = :tenant_id AND finding_id = :finding_id
+            """  # noqa: S608
+        )
+        result = await self._session.execute(
+            stmt, {"tenant_id": str(tenant_id), "finding_id": str(finding_id)}
+        )
+        row = result.fetchone()
+        return _row_to_finding(row) if row is not None else None
