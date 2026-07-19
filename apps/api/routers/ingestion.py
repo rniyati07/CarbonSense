@@ -8,7 +8,9 @@ AnalysisPipelineWorkflow) is Phase 0's prerequisite work; this router must
 not bypass it, per the explicit constraint in the ENG-5 spec.
 
 CSV upload and the smart-meter push receiver both funnel through
-_ingest_raw_rows() -- one code path through DataQualityGate, not two.
+services.ingestion.orchestrator.ingest_raw_rows() -- one code path through
+DataQualityGate, not two, and one this router does not itself implement
+(no business logic in apps/api).
 
 The push receiver (POST /v1/ingestion/webhooks/{webhook_id}/push) is the
 one endpoint in this API that is deliberately *not* behind JWT auth -- a
@@ -39,11 +41,7 @@ from apps.api.dependencies import (
 )
 from apps.api.idempotency import get_cached_response, store_response
 from orchestration.events.kafka.producer import EventPublisher
-from services.ingestion.config import DataQualityGateConfig
-from services.ingestion.event_publisher import DataQualityEventPublisher
-from services.ingestion.models import RawIngestionBatch
-from services.ingestion.normalization import resolve_columns
-from services.ingestion.quality_gate import DataQualityGate
+from services.ingestion.orchestrator import ingest_raw_rows
 from services.ingestion.repository import IngestionWebhookRepository, IngestionWriteRepository
 from shared.auth.secrets import generate_client_secret, hash_client_secret, verify_client_secret
 from shared.auth.tenant_context import tenant_scope
@@ -94,44 +92,6 @@ class WebhookPushRequest(BaseModel):
     readings: list[WebhookPushReading]
 
 
-async def _ingest_raw_rows(
-    session: AsyncSession,
-    tenant_id: UUID,
-    building_id: UUID,
-    raw_rows: list[dict[str, Any]],
-    ingestion_source: str,
-    event_publisher: EventPublisher,
-) -> UUID:
-    config = DataQualityGateConfig()
-    mapped_rows, _ = resolve_columns(raw_rows, config.get_source("default").column_mapping)
-
-    meter_types: dict[str, str] = {}
-    for row in mapped_rows:
-        meter_id = str(row.get("circuit_id") or "").strip()
-        if not meter_id:
-            continue
-        meter_types.setdefault(meter_id, str(row.get("circuit_type") or "main_feed"))
-
-    write_repo = IngestionWriteRepository(session)
-    circuit_map = await write_repo.get_or_create_circuits(tenant_id, building_id, meter_types)
-
-    batch = RawIngestionBatch(
-        tenant_id=tenant_id,
-        building_id=building_id,
-        ingestion_source=ingestion_source,
-        raw_rows=raw_rows,
-        circuit_map=circuit_map,
-    )
-    result = DataQualityGate(config=config).process_batch(batch)
-
-    await write_repo.save_readings(result.readings)
-    batch_id = await write_repo.create_batch_record(tenant_id, building_id, result)
-
-    DataQualityEventPublisher(producer=event_publisher).publish_or_alert(result)
-
-    return batch_id
-
-
 @router.post("/csv", response_model=BatchAcceptedResponse, status_code=status.HTTP_202_ACCEPTED)
 async def upload_csv(
     building_id: UUID,
@@ -159,7 +119,7 @@ async def upload_csv(
     if not raw_rows:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="CSV file has no rows")
 
-    batch_id = await _ingest_raw_rows(
+    batch_id = await ingest_raw_rows(
         session, tenant_id, building_id, raw_rows, "csv_upload", event_publisher
     )
     response = BatchAcceptedResponse(
@@ -252,7 +212,7 @@ async def push_smart_meter_readings(
     ]
 
     async with factory() as session, tenant_scope(session, tenant_id):
-        batch_id = await _ingest_raw_rows(
+        batch_id = await ingest_raw_rows(
             session, tenant_id, building_id, raw_rows, "smart_meter_api", event_publisher
         )
         await session.commit()
