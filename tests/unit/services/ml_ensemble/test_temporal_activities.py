@@ -68,7 +68,16 @@ class TestMLTrainingResultDTO:
 
 
 class TestTrainActivitiesStubBehaviour:
-    """Activities must gracefully skip when the feature store returns no data."""
+    """Activities must gracefully skip when the feature store returns no data.
+
+    ENG-6: _fetch_training_features now queries the real feature store
+    (models/feature_store/repository.py) instead of being a hardcoded
+    stub -- these tests patch it directly to exercise the "no data"
+    path without needing a live database, matching this test file's own
+    original intent (see the module docstring). Real feature-store-backed
+    behavior is covered by tests/unit/models/feature_store/test_repository.py
+    and tests/unit/pipelines/training/test_train_and_evaluate.py.
+    """
 
     def test_train_if_activity_returns_skipped_when_no_features(self) -> None:
         from orchestration.temporal.activities.ml_ensemble_activities import (
@@ -82,10 +91,16 @@ class TestTrainActivitiesStubBehaviour:
         )
 
         # Run outside of a Temporal worker — the activity function is an async def.
-        # We patch the heartbeat context to a no-op.
+        # We patch the heartbeat context and the feature-store fetch to no-ops.
         import unittest.mock as mock
 
-        with mock.patch("temporalio.activity.heartbeat"):
+        with (
+            mock.patch("temporalio.activity.heartbeat"),
+            mock.patch(
+                "orchestration.temporal.activities.ml_ensemble_activities._fetch_training_features",
+                new=mock.AsyncMock(return_value=[]),
+            ),
+        ):
             result = asyncio.run(train_isolation_forest_activity(inp))
 
         assert result.status == "skipped"
@@ -106,7 +121,13 @@ class TestTrainActivitiesStubBehaviour:
 
         import unittest.mock as mock
 
-        with mock.patch("temporalio.activity.heartbeat"):
+        with (
+            mock.patch("temporalio.activity.heartbeat"),
+            mock.patch(
+                "orchestration.temporal.activities.ml_ensemble_activities._fetch_training_features",
+                new=mock.AsyncMock(return_value=[]),
+            ),
+        ):
             result = asyncio.run(train_autoencoder_activity(inp))
 
         assert result.status == "skipped"
