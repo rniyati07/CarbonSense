@@ -7,6 +7,14 @@ event are all ingestion-domain concerns, not API-layer concerns.
 
 Both the CSV upload endpoint and the smart-meter push receiver call this
 single function -- one code path through DataQualityGate, not two.
+
+ENG-6a extends it with an optional `config`/`source_id` pair so the public-
+dataset ingestion pipeline (pipelines/dataset_ingestion/) can supply a
+dataset-specific column-alias SourceConfig (COMBED, BDG2, ...) instead of
+always resolving against "default" -- the one hardcoded assumption ENG-5's
+two callers (both real-time, single-source paths) never needed to
+parameterize. Both existing callers are unaffected: omitting the new
+arguments reproduces the exact prior behavior.
 """
 
 from __future__ import annotations
@@ -32,9 +40,11 @@ async def ingest_raw_rows(
     raw_rows: list[dict[str, Any]],
     ingestion_source: str,
     event_publisher: EventPublisher,
+    source_id: str = "default",
+    config: DataQualityGateConfig | None = None,
 ) -> UUID:
-    config = DataQualityGateConfig()
-    mapped_rows, _ = resolve_columns(raw_rows, config.get_source("default").column_mapping)
+    cfg = config or DataQualityGateConfig()
+    mapped_rows, _ = resolve_columns(raw_rows, cfg.get_source(source_id).column_mapping)
 
     meter_types: dict[str, str] = {}
     for row in mapped_rows:
@@ -49,11 +59,12 @@ async def ingest_raw_rows(
     batch = RawIngestionBatch(
         tenant_id=tenant_id,
         building_id=building_id,
+        source_id=source_id,
         ingestion_source=ingestion_source,
         raw_rows=raw_rows,
         circuit_map=circuit_map,
     )
-    result = DataQualityGate(config=config).process_batch(batch)
+    result = DataQualityGate(config=cfg).process_batch(batch)
 
     await write_repo.save_readings(result.readings)
     batch_id = await write_repo.create_batch_record(tenant_id, building_id, result)
