@@ -167,10 +167,6 @@ class IsolationForestTrainer:
             )
             mlflow.log_dict({"rule_ids": rule_ids}, "rule_ids.json")
             mlflow.sklearn.log_model(model, _ARTIFACT_MODEL_DIR)
-            # TODO(ENG-6a): Call mlflow.register_model() here once ENG-6a has stood up
-            # the Model Registry with the models:/{tenant_id}/{building_id}/ml_ensemble/{version}
-            # URI convention (TRD §6.1). Registration and promotion gating (ENG-6c) are
-            # ENG-6 responsibilities; ENG-3d's job is to log the run artifact (done above).
 
             with tempfile.TemporaryDirectory() as tmp_dir:
                 scaler_path = scaler.save(Path(tmp_dir))
@@ -179,6 +175,31 @@ class IsolationForestTrainer:
             run_id = run.info.run_id
             model_uri = mlflow.get_artifact_uri(_ARTIFACT_MODEL_DIR)
             scaler_uri = mlflow.get_artifact_uri(_ARTIFACT_SCALER_DIR)
+
+            registered_version: str | None = None
+            try:
+                from models.registry.register import register_model_version
+
+                registered_version = register_model_version(
+                    run_id=run_id,
+                    artifact_path=_ARTIFACT_MODEL_DIR,
+                    tenant_id=tenant_id,
+                    building_id=building_id,
+                    model_type="isolation_forest",
+                    artifact_uri=model_uri,
+                )
+            except Exception:
+                # Registration is a Model Registry concern layered on top of
+                # a successful training run -- a registry-side failure (e.g.
+                # transient backend issue) must not fail training itself.
+                # The run and its artifacts are already durably logged above.
+                logger.exception(
+                    "IsolationForest training succeeded but Model Registry "
+                    "registration failed for tenant=%s building=%s run_id=%s",
+                    tenant_id,
+                    building_id,
+                    run_id,
+                )
 
         logger.info(
             "IsolationForest trained: tenant=%s building=%s samples=%d "
@@ -214,4 +235,5 @@ class IsolationForestTrainer:
                 "n_features": float(raw_matrix.shape[1]),
                 "contamination": contamination,
             },
+            registered_version=registered_version,
         )

@@ -361,16 +361,35 @@ class AutoencoderTrainer:
                     model_path,
                 )
                 mlflow.log_artifact(str(model_path), _ARTIFACT_MODEL_DIR)
-                # TODO(ENG-6a): Call mlflow.register_model() here once ENG-6a has stood up the
-                # Model Registry with the models:/{tenant_id}/{building_id}/ml_ensemble/{version}
-                # URI convention (TRD §6.1). Registration and promotion gating (ENG-6c) are ENG-6
-                # responsibilities; ENG-3d's job is to log the run artifact (done above).
                 scaler_path = scaler.save(Path(tmp_dir))
                 mlflow.log_artifact(str(scaler_path), _ARTIFACT_SCALER_DIR)
 
             run_id = run.info.run_id
             model_uri = mlflow.get_artifact_uri(_ARTIFACT_MODEL_DIR)
             scaler_uri = mlflow.get_artifact_uri(_ARTIFACT_SCALER_DIR)
+
+            registered_version: str | None = None
+            try:
+                from models.registry.register import register_model_version
+
+                registered_version = register_model_version(
+                    run_id=run_id,
+                    artifact_path=_ARTIFACT_MODEL_DIR,
+                    tenant_id=tenant_id,
+                    building_id=building_id,
+                    model_type="autoencoder",
+                    artifact_uri=model_uri,
+                )
+            except Exception:
+                # See IsolationForestTrainer's identical try/except for why
+                # a registry-side failure must not fail training itself.
+                logger.exception(
+                    "Autoencoder training succeeded but Model Registry "
+                    "registration failed for tenant=%s building=%s run_id=%s",
+                    tenant_id,
+                    building_id,
+                    run_id,
+                )
 
         logger.info(
             "Autoencoder trained: tenant=%s building=%s samples=%d windows=%d "
@@ -409,6 +428,7 @@ class AutoencoderTrainer:
                 "n_features": float(raw_matrix.shape[1]),
                 "n_windows": float(len(windows)),
             },
+            registered_version=registered_version,
         )
 
     @staticmethod
