@@ -171,6 +171,27 @@ class RetrainingInput:
 
 
 @dataclass(frozen=True)
+class RollbackCheckInput:
+    """ENG-6d — post-promotion false-positive-rate monitoring (TRD v2.0
+    §6.4). window_days is the trailing feedback window checked each run."""
+
+    tenant_id: str
+    building_id: str
+    model_type: str  # "isolation_forest" | "autoencoder"
+    window_days: int = 7
+
+
+@dataclass(frozen=True)
+class RollbackMonitoringInput:
+    """Per-building input to RollbackMonitoringWorkflow, which checks both
+    ensemble members (isolation_forest, autoencoder) each run."""
+
+    tenant_id: str
+    building_id: str
+    window_days: int = 7
+
+
+@dataclass(frozen=True)
 class MLTrainingInput:
     """Input DTO for ML Ensemble training Temporal activities (ENG-3d).
 

@@ -22,7 +22,6 @@ from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from orchestration.temporal.activities.drift_detection_stub import drift_detection_activity
-from orchestration.temporal.activities.retraining_stub import retraining_activity
 from orchestration.temporal.dto import ActivityResult, DriftDetectionInput, RetrainingInput
 from orchestration.temporal.schedules.drift_detection import (
     register_drift_detection_schedule,
@@ -76,6 +75,21 @@ async def test_drift_detection_workflow_executes() -> None:
         assert result.status == "completed"
 
 
+# Same root cause and fix as mocked_drift_detection_activity above:
+# retraining_activity (retraining_stub.py) stopped being a stub once ENG-6d
+# wired it to call train_and_evaluate() against a real database session.
+# With no database reachable in the test-unit CI job and retry_policy=None
+# (default retry policy, retries indefinitely), the real activity would hang
+# this test indefinitely.
+@activity.defn(name="retraining_activity")
+async def mocked_retraining_activity(input: RetrainingInput) -> ActivityResult:
+    return ActivityResult(
+        step_name="retraining",
+        status="completed",
+        detail="Mocked retraining",
+    )
+
+
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_retraining_workflow_executes() -> None:
@@ -86,7 +100,7 @@ async def test_retraining_workflow_executes() -> None:
             env.client,
             task_queue="test-queue",
             workflows=[RetrainingWorkflow],
-            activities=[retraining_activity],
+            activities=[mocked_retraining_activity],
         ),
     ):
         result = await env.client.execute_workflow(
