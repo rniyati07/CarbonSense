@@ -60,6 +60,10 @@ async def train_and_evaluate(
     """
     window_end = datetime.datetime.now(datetime.UTC)
     window_start = window_end - datetime.timedelta(days=window_days)
+    window_tags = {
+        "training_window_start": window_start.isoformat(),
+        "training_window_end": window_end.isoformat(),
+    }
 
     factory = get_session_factory()
     async with factory() as session, tenant_scope(session, tenant_id):
@@ -98,6 +102,7 @@ async def train_and_evaluate(
         building_type=building_type,
         mlflow_tracking_uri=mlflow_tracking_uri,
         training_trigger=trigger,
+        run_tags=window_tags,
     )
     summary.outcomes.append(
         await _evaluate_and_promote(if_result, gate, reg, tenant_id, building_id)
@@ -111,6 +116,7 @@ async def train_and_evaluate(
         config=config,
         mlflow_tracking_uri=mlflow_tracking_uri,
         training_trigger=trigger,
+        run_tags=window_tags,
     )
     summary.outcomes.append(
         await _evaluate_and_promote(ae_result, gate, reg, tenant_id, building_id)
