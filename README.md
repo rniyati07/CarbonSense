@@ -58,7 +58,7 @@ flowchart TB
     L --> M
     C --> M
     M --> N["API Consumer\n(integrator / future client)"]
-    M -.-> W["React Dashboard\n(planned)"]
+    M -.-> W["React Dashboard\n"]
 
     subgraph MLOPS["Continuous Learning (MLOps)"]
         O["Feature Store"] --> P["Model Training\nIsolation Forest + Autoencoder"]
