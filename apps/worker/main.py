@@ -23,11 +23,13 @@ from orchestration.temporal.activities.ml_ensemble_activities import (
 )
 from orchestration.temporal.activities.optimization import optimization_activity
 from orchestration.temporal.activities.retraining_stub import retraining_activity
+from orchestration.temporal.activities.rollback_check import rollback_check_activity
 from orchestration.temporal.workflows.analysis_pipeline import AnalysisPipelineWorkflow
 from orchestration.temporal.workflows.drift_detection import DriftDetectionWorkflow
 from orchestration.temporal.workflows.hello_world import HelloWorldWorkflow
 from orchestration.temporal.workflows.ml_ensemble_training import MLEnsembleTrainingWorkflow
 from orchestration.temporal.workflows.retraining import RetrainingWorkflow
+from orchestration.temporal.workflows.rollback_monitoring import RollbackMonitoringWorkflow
 from shared.config.temporal import TemporalSettings
 
 
@@ -47,6 +49,7 @@ async def run_worker() -> None:
             DriftDetectionWorkflow,
             RetrainingWorkflow,
             MLEnsembleTrainingWorkflow,
+            RollbackMonitoringWorkflow,
         ],
         activities=[
             greet_activity,
@@ -62,6 +65,7 @@ async def run_worker() -> None:
             retraining_activity,
             train_isolation_forest_activity,
             train_autoencoder_activity,
+            rollback_check_activity,
         ],
     )
     await worker.run()

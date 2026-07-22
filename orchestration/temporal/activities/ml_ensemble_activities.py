@@ -23,6 +23,7 @@ from uuid import UUID
 
 from temporalio import activity
 
+from models.feature_store.feature_set_v1 import FeatureSetV1
 from orchestration.temporal.dto import MLTrainingInput, MLTrainingResult
 
 logger = logging.getLogger(__name__)
@@ -210,24 +211,39 @@ async def train_autoencoder_activity(input: MLTrainingInput) -> MLTrainingResult
 async def _fetch_training_features(
     tenant_id: UUID,
     building_id: UUID,
-) -> list:
-    """Fetch pre-assembled FeatureSetV1 rows for training.
+    window_days: int = 90,
+) -> list[FeatureSetV1]:
+    """Fetch pre-assembled FeatureSetV1 rows for training from the feature
+    store (ENG-6, migration 0009) -- populated by feature_assembly_activity
+    on every real AnalysisPipelineWorkflow run (analysis_stubs.py) and by
+    the batch feature-engineering pipeline (pipelines/feature_engineering/)
+    when backfilling from a bulk-ingested public dataset (ENG-6a/6b).
 
-    TODO(ENG-6b): Replace this stub with a real feature store query that:
-      1. Connects via an RLS-enforced read replica using tenant_id credentials.
-      2. Queries the feature store table for rows within the training window
-         (e.g., 90 days of hourly data).
-      3. Returns List[FeatureSetV1] for the given (tenant, building) pair.
-    ENG-6b owns the training pipeline with three retraining triggers (calendar,
-    drift, feedback-volume) and is responsible for wiring this to the feature store
-    (depends on ENG-2d database infrastructure). ENG-4 is the Optimization Engine
-    and is unrelated to ML training feature fetches.
-
-    For now returns an empty list; the activity handles the skip path.
+    window_days=90 matches the training-window default already documented
+    on the RLS-enforced query path (analysis_stubs.py's window_days=30 is
+    the *analysis* window; training wants more history where available).
     """
+    import datetime
+
+    from models.feature_store.repository import FeatureStoreRepository
+    from shared.auth.tenant_context import tenant_scope
+    from shared.database import get_session_factory
+
+    window_end = datetime.datetime.now(datetime.UTC)
+    window_start = window_end - datetime.timedelta(days=window_days)
+
+    factory = get_session_factory()
+    async with factory() as session, tenant_scope(session, tenant_id):
+        features = await FeatureStoreRepository(session).get_features_for_building(
+            tenant_id, building_id, window_start, window_end
+        )
+
     logger.debug(
-        "_fetch_training_features: stub — no feature store connected for tenant=%s building=%s",
+        "_fetch_training_features: found %d feature_store rows for tenant=%s building=%s "
+        "(window=%dd)",
+        len(features),
         tenant_id,
         building_id,
+        window_days,
     )
-    return []
+    return features

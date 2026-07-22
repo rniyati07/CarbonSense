@@ -264,6 +264,22 @@ async def feature_assembly_activity(
             )
         )
 
+    # ENG-6: persist so this run's features become training data. Every
+    # prior consumer of FeatureAssemblyOutput used it in-memory only
+    # (ml_ensemble_activity, root_cause_attribution_activity) -- nothing
+    # before ENG-6 ever wrote a FeatureSetV1 row anywhere, which is exactly
+    # why _fetch_training_features() (ml_ensemble_activities.py) has been a
+    # TODO(ENG-6b) stub returning an empty list since ENG-3d. A fresh
+    # session/tenant_scope block (rather than keeping the earlier one open
+    # across the pure-compute assembly step above) matches this file's own
+    # existing convention of scoping DB access tightly around each fetch.
+    if features:
+        from models.feature_store.repository import FeatureStoreRepository
+
+        async with factory() as save_session, tenant_scope(save_session, tenant_id):
+            await FeatureStoreRepository(save_session).save_features(features)
+            await save_session.commit()
+
     return FeatureAssemblyOutput(features=features)
 
 
