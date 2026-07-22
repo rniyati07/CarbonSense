@@ -174,12 +174,6 @@ make test-unit
 - **Tier-differentiated promotion gating** — differentiated human-review requirements for freemium vs. enterprise/compliance tenants, pending a platform-wide false-positive-rate ceiling decision.
 - **Expanded public dataset coverage** — extending real-dataset training beyond the current BDG2 slice to the full multi-site corpus and additional public sources (e.g. ASHRAE Great Energy Predictor III).
 
-## 10. Contributors
-
-- [likitha-thatikondla](https://github.com/likitha-thatikondla)
-- [rniyati07](https://github.com/rniyati07)
-- [rthi4115](https://github.com/rthi4115)
-
-## 11. License
+## 10. License
 
 Proprietary. All rights reserved.
