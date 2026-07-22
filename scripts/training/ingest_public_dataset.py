@@ -2,8 +2,8 @@
 
 Usage:
     python scripts/training/ingest_public_dataset.py \\
-        --source combed \\
-        --file tests/fixtures/datasets/combed_sample.csv \\
+        --source bdg2 \\
+        --file tests/fixtures/datasets/bdg2_sample.csv \\
         --tenant-id <uuid> --building-id <uuid>
 
 Requires APP_DATABASE_URL pointed at a migrated database (0009+) and a
