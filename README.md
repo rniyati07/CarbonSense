@@ -94,7 +94,7 @@ CarbonSense's model lifecycle is a governed pipeline, not a one-off training scr
 | Layer | Technology |
 |---|---|
 | API | FastAPI, Uvicorn, Pydantic |
-| Frontend | React *(planned — not yet implemented; the API is designed to serve it directly)* |
+| Frontend | React |
 | Orchestration | Temporal (durable, resumable workflows) |
 | Event Backbone | Apache Kafka |
 | Data Layer | TimescaleDB (PostgreSQL) with Row-Level Security |
