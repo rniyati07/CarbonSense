@@ -25,14 +25,10 @@ class DriftDetectionWorkflow:
 
     @workflow.run
     async def run(self, input: DriftDetectionInput) -> ActivityResult:
-        # Merge conflict resolution (pre-ENG-4 integration audit): develop's
-        # side (from the eng-3g-originated fix, a717ad3/6157923) validated
-        # only tenant_id but used the correct non-retryable ApplicationError
-        # -- a plain ValueError here is treated as retryable by the Temporal
-        # Python SDK and made input-validation-failure tests hang waiting for
-        # a WorkflowFailureError that never arrived. eng-3e's side added the
-        # building_id check but reverted to the plain ValueError that caused
-        # exactly that hang. Combined: both required fields, non-retryable.
+        # main previously only validated tenant_id; develop's validation
+        # (from the eng-3e integration's own merge-conflict resolution)
+        # additionally requires building_id and is the superset -- taking
+        # develop's side whole here, not a re-merge of two partial fixes.
         if not input.tenant_id or not input.building_id:
             raise ApplicationError("tenant_id and building_id are required", non_retryable=True)
 

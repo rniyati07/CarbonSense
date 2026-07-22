@@ -65,6 +65,14 @@ class TrainingRunResult(BaseModel):
     )
     n_training_samples: int = Field(ge=0)
     metrics: dict[str, float] = Field(default_factory=dict)
+    registered_version: str | None = Field(
+        default=None,
+        description=(
+            "MLflow Model Registry version number under "
+            "models:/{tenant_id}/{building_id}/{model_type} (ENG-6a, TRD v2.0 §6.1). "
+            "None if registration was not attempted or failed non-fatally."
+        ),
+    )
 
 
 class IsolationForestScore(BaseModel):
